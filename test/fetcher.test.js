@@ -114,4 +114,79 @@ describe('fetcher', () => {
     assert.ok('content-type' in res.headers);
     assert.ok('vary' in res.headers);
   });
+
+  describe('retries', () => {
+    let flaky;
+    let flakyUrl;
+    let hits;
+
+    before(async () => {
+      hits = {};
+      flaky = createServer((req, res) => {
+        hits[req.url] = (hits[req.url] ?? 0) + 1;
+        // /flaky-2 fails twice (503) then succeeds; /always-503 never recovers.
+        if (req.url === '/flaky-2') {
+          if (hits[req.url] <= 2) {
+            res.writeHead(503);
+            res.end('try later');
+            return;
+          }
+          res.writeHead(200, { 'Content-Type': 'text/plain' });
+          res.end('recovered');
+          return;
+        }
+        if (req.url === '/always-503') {
+          res.writeHead(503);
+          res.end('down');
+          return;
+        }
+        if (req.url === '/not-found') {
+          res.writeHead(404);
+          res.end('nope');
+          return;
+        }
+        res.writeHead(200);
+        res.end('ok');
+      });
+      await new Promise((resolve) => flaky.listen(0, '127.0.0.1', resolve));
+      flakyUrl = `http://127.0.0.1:${flaky.address().port}`;
+    });
+
+    after(async () => {
+      await new Promise((resolve) => flaky.close(resolve));
+    });
+
+    it('should retry transient 503s and return the eventual success', async () => {
+      hits['/flaky-2'] = 0;
+      const fetcher = createFetcher({ retries: 2, retryBaseDelay: 1 });
+      const res = await fetcher.fetch(`${flakyUrl}/flaky-2`);
+      assert.equal(res.status, 200);
+      assert.equal(res.body, 'recovered');
+      assert.equal(hits['/flaky-2'], 3); // 1 initial + 2 retries
+    });
+
+    it('should give up after exhausting retries and return the last failure', async () => {
+      hits['/always-503'] = 0;
+      const fetcher = createFetcher({ retries: 2, retryBaseDelay: 1 });
+      const res = await fetcher.fetch(`${flakyUrl}/always-503`);
+      assert.equal(res.status, 503);
+      assert.equal(hits['/always-503'], 3);
+    });
+
+    it('should not retry a non-retryable status like 404', async () => {
+      hits['/not-found'] = 0;
+      const fetcher = createFetcher({ retries: 3, retryBaseDelay: 1 });
+      const res = await fetcher.fetch(`${flakyUrl}/not-found`);
+      assert.equal(res.status, 404);
+      assert.equal(hits['/not-found'], 1);
+    });
+
+    it('should not retry when retries is 0', async () => {
+      hits['/always-503'] = 0;
+      const fetcher = createFetcher({ retries: 0, retryBaseDelay: 1 });
+      const res = await fetcher.fetch(`${flakyUrl}/always-503`);
+      assert.equal(res.status, 503);
+      assert.equal(hits['/always-503'], 1);
+    });
+  });
 });

@@ -11,6 +11,8 @@ interface CliOptions {
   output: string;
   checks?: string;
   timeout: string;
+  retries: string;
+  concurrency: string;
   verbose?: boolean;
   onlyFailures?: boolean;
   saveBaseline?: string;
@@ -27,9 +29,11 @@ export function cli(argv: string[]): void {
     .version(VERSION, '-v, --version')
     .argument('<urls...>', 'One or more URLs to audit (e.g., https://example.com)')
     .option('--json', 'Output results as JSON')
-    .option('--output <format>', 'Output format: terminal, json, html', 'terminal')
+    .option('--output <format>', 'Output format: terminal, json, html, markdown', 'terminal')
     .option('--checks <list>', 'Comma-separated list of checks to run')
     .option('--timeout <ms>', 'Per-request timeout in milliseconds', '10000')
+    .option('--retries <n>', 'Retry attempts for transient fetch failures (timeouts, 5xx)', '2')
+    .option('--concurrency <n>', 'Max URLs to audit in parallel (batch mode)', '1')
     .option('--verbose', 'Show detailed request and check execution logs')
     .option('--only-failures', 'Only show checks/findings with failures or warnings')
     .option('--save-baseline <path>', 'Save audit result as a baseline JSON file for future comparison')
@@ -54,6 +58,12 @@ export function cli(argv: string[]): void {
       }
 
       const format = (options.json ? 'json' : options.output) as OutputFormat;
+      const validFormats: OutputFormat[] = ['terminal', 'json', 'html', 'markdown'];
+      if (!validFormats.includes(format)) {
+        console.error(`Error: Unknown output format "${format}". Valid: ${validFormats.join(', ')}`);
+        process.exit(1);
+      }
+
       const checks = options.checks ? options.checks.split(',').map((s) => s.trim()) : undefined;
 
       if (checks) {
@@ -66,9 +76,22 @@ export function cli(argv: string[]): void {
         }
       }
 
+      const retries = parseInt(options.retries, 10);
+      if (isNaN(retries) || retries < 0) {
+        console.error('Error: --retries must be a non-negative integer');
+        process.exit(1);
+      }
+
+      const concurrency = parseInt(options.concurrency, 10);
+      if (isNaN(concurrency) || concurrency < 1) {
+        console.error('Error: --concurrency must be a positive integer');
+        process.exit(1);
+      }
+
       const baseOptions = {
         checks,
         timeout: parseInt(options.timeout, 10),
+        retries,
         verbose: options.verbose,
       };
 
@@ -127,7 +150,7 @@ export function cli(argv: string[]): void {
             process.exit(1);
           }
 
-          const batch = await batchAudit(urls, baseOptions);
+          const batch = await batchAudit(urls, { ...baseOptions, concurrency });
           if (options.onlyFailures) {
             batch.reports = batch.reports.map((r) => applyOnlyFailures(r, true));
           }

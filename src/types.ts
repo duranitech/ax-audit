@@ -75,6 +75,13 @@ export interface AuditOptions {
   checks?: string[];
   timeout?: number;
   verbose?: boolean;
+  /** Retry attempts for transient fetch failures (timeouts, 5xx, network errors). Default 2. */
+  retries?: number;
+}
+
+export interface BatchOptions extends Omit<AuditOptions, 'url'> {
+  /** Maximum number of URLs audited in parallel. Default 1 (sequential). */
+  concurrency?: number;
 }
 
 export interface BatchAuditReport {
@@ -95,7 +102,7 @@ export interface SecurityHeader {
   critical: boolean;
 }
 
-export type OutputFormat = 'terminal' | 'json' | 'html';
+export type OutputFormat = 'terminal' | 'json' | 'html' | 'markdown';
 
 /* ── Baseline / Diff ──────────────────────────────────────── */
 

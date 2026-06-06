@@ -63,7 +63,16 @@ export const AI_CRAWLERS: Record<string, string[]> = {
     'NeevaBot',
     'PhindBot',
   ],
-  fetching: ['FirecrawlAgent', 'Facebookbot', 'Bingbot', 'Goose', 'AwarioBot', 'AwarioRssBot', 'AwarioSmartBot'],
+  fetching: [
+    'FirecrawlAgent',
+    'Facebookbot',
+    'Bingbot',
+    'Goose',
+    'AwarioBot',
+    'AwarioRssBot',
+    'AwarioSmartBot',
+    'Google-Agent', // Google's official signed AI-agent UA (identity https://agent.bot.goog), oficializado 2026
+  ],
 };
 
 export const ALL_AI_CRAWLERS: string[] = [...AI_CRAWLERS.training, ...AI_CRAWLERS.search, ...AI_CRAWLERS.fetching];

@@ -2,6 +2,21 @@
 
 All notable changes to ax-audit are documented here.
 
+## [3.6.0] - 2026-06-06
+
+### Added
+
+- **Fetcher retries with exponential backoff**: transient failures (network errors, timeouts, and 408/425/429/500/502/503/504) are retried automatically. Configurable via `--retries <n>` (CLI, default 2) and `retries` (programmatic `AuditOptions`); backoff doubles from a 250ms base. Non-retryable responses (e.g. 404) short-circuit immediately. Previously a single transient timeout scored a check 0.
+- **Parallel batch auditing**: `--concurrency <n>` (CLI) and `concurrency` on the new `BatchOptions` type run multiple URL audits in parallel via an order-preserving work queue. Default remains sequential (1).
+- **Markdown reporter**: `--output markdown` emits a self-contained Markdown report (score, summary table, per-check findings with status emoji, baseline deltas) — ideal for CI logs and PR comments. Supported for single and batch audits. New exports: `renderMarkdown`, `renderBatchMarkdown`.
+- **Crawler list refresh**: added Google's official signed AI-agent user-agent `Google-Agent` (identity `https://agent.bot.goog`) to the known-crawlers list.
+- **CLI validation**: `--retries`, `--concurrency`, and `--output` now reject invalid values with a clear error.
+- **17 new tests** (301 total): fetcher retry behavior (against a flaky local server), batch ordering/concurrency, and the Markdown reporter.
+
+### Notes
+
+- No scoring changes. Retries can raise scores on flaky endpoints that previously timed out, but the scoring model itself is unchanged.
+
 ## [3.5.0] - 2026-06-06
 
 ### Added

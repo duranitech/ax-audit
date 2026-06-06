@@ -1,13 +1,13 @@
 import { createFetcher } from './fetcher.js';
 import { checks as allChecks } from './checks/index.js';
 import { calculateOverallScore, getGrade } from './scorer.js';
-import type { AuditOptions, AuditReport, BatchAuditReport, CheckContext, CheckResult } from './types.js';
+import type { AuditOptions, AuditReport, BatchAuditReport, BatchOptions, CheckContext, CheckResult } from './types.js';
 
 export async function audit(options: AuditOptions): Promise<AuditReport> {
   const startTime = performance.now();
   const verbose = options.verbose ?? false;
   const log = verbose ? (msg: string) => console.error(`  [verbose] ${msg}`) : () => {};
-  const fetcher = createFetcher({ timeout: options.timeout ?? 10000, verbose });
+  const fetcher = createFetcher({ timeout: options.timeout ?? 10000, verbose, retries: options.retries ?? 2 });
 
   const homepage = await fetcher.fetch(options.url);
 
@@ -56,14 +56,21 @@ export async function audit(options: AuditOptions): Promise<AuditReport> {
   };
 }
 
-export async function batchAudit(urls: string[], options: Omit<AuditOptions, 'url'>): Promise<BatchAuditReport> {
+export async function batchAudit(urls: string[], options: BatchOptions = {}): Promise<BatchAuditReport> {
   const startTime = performance.now();
-  const reports: AuditReport[] = [];
+  const concurrency = Math.max(1, options.concurrency ?? 1);
 
-  for (const url of urls) {
-    const result = await audit({ ...options, url });
-    reports.push(result);
+  // Preserve input order in the output while running up to `concurrency` audits
+  // in parallel via a shared index-based work queue.
+  const reports: AuditReport[] = new Array(urls.length);
+  let next = 0;
+  async function worker(): Promise<void> {
+    while (next < urls.length) {
+      const i = next++;
+      reports[i] = await audit({ ...options, url: urls[i] });
+    }
   }
+  await Promise.all(Array.from({ length: Math.min(concurrency, urls.length) }, worker));
 
   const scores = reports.map((r) => r.overallScore);
   const averageScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);

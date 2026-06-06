@@ -9,6 +9,7 @@ export type {
   BaselineData,
   BaselineDiff,
   BatchAuditReport,
+  BatchOptions,
   CheckDiff,
   CheckResult,
   CheckMeta,

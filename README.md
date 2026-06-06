@@ -106,6 +106,15 @@ ax-audit https://example.com --checks llms-txt,robots-txt,agent-json
 # Custom timeout per request (default: 10s)
 ax-audit https://example.com --timeout 15000
 
+# Retry transient failures — timeouts and 5xx (default: 2 attempts)
+ax-audit https://example.com --retries 3
+
+# Markdown report — ideal for CI / PR comments
+ax-audit https://example.com --output markdown > ax-report.md
+
+# Batch audit in parallel (default: sequential)
+ax-audit https://a.com https://b.com https://c.com --concurrency 3
+
 # Verbose mode — see every HTTP request, cache hit, and check score
 ax-audit https://example.com --verbose
 
@@ -198,10 +207,10 @@ console.log(report.overallScore); // 0-100
 console.log(report.grade.label);  // 'Excellent' | 'Good' | 'Fair' | 'Poor'
 console.log(report.results);      // Individual check results with findings
 
-// Batch audit
+// Batch audit (optionally in parallel)
 const batch: BatchAuditReport = await batchAudit(
   ['https://example.com', 'https://other.com'],
-  { timeout: 10000 }
+  { timeout: 10000, concurrency: 3, retries: 2 }
 );
 console.log(batch.summary.averageScore); // Average across all URLs
 console.log(batch.summary.passed);       // Number of URLs scoring >= 70
@@ -280,7 +289,7 @@ Fail on regressions using a committed baseline:
 npm test
 ```
 
-284 tests covering all 18 checks, the scorer, the HTTP fetcher (against a real local server), baseline comparison, HTML parsing utilities, and edge cases. Uses Node.js built-in test runner (`node:test`), no extra test dependencies.
+301 tests covering all 18 checks, the scorer, the HTTP fetcher (retries + per-header caching, against a real local server), the batch orchestrator (ordering + concurrency), the Markdown reporter, baseline comparison, HTML parsing utilities, and edge cases. Uses Node.js built-in test runner (`node:test`), no extra test dependencies.
 
 ## Tech Stack
 
