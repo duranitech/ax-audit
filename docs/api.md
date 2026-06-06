@@ -7,68 +7,193 @@ import { audit, batchAudit } from 'ax-audit';
 import type { AuditReport, BatchAuditReport } from 'ax-audit';
 ```
 
-## `audit(options: AuditOptions): Promise<AuditReport>`
+The package is ESM-only (`"type": "module"`), targets Node 18+ (built-in `fetch`), and ships type declarations at `dist/index.d.ts`.
 
-Runs all (or selected) checks against one URL. Checks execute in parallel via `Promise.allSettled`; a crashing check yields a score-0 result instead of failing the audit. All HTTP requests within a run share an in-memory cache keyed by URL + normalized request headers.
+## `audit(options): Promise<AuditReport>`
+
+Runs all (or selected) checks against one URL.
 
 ```typescript
-const report = await audit({
-  url: 'https://example.com',
-  checks: ['llms-txt', 'content-negotiation'], // optional — default: all
-  timeout: 10_000,                              // optional, ms per request
-  retries: 2,                                   // optional, transient-failure retries
-  verbose: false,                               // optional, logs to stderr
-});
+function audit(options: AuditOptions): Promise<AuditReport>;
 
-report.overallScore; // 0–100, weighted
-report.grade.label;  // 'Excellent' | 'Good' | 'Fair' | 'Poor'
-report.results;      // CheckResult[] — score, findings, duration per check
+interface AuditOptions {
+  url: string;          // required, fully qualified (scheme included)
+  checks?: string[];    // default: all. Unknown IDs are silently ignored here
+                        // (the CLI validates them; the API does not)
+  timeout?: number;     // ms per request, default 10000
+  retries?: number;     // transient-failure retries, default 2
+  verbose?: boolean;    // log to stderr, default false
+}
 ```
 
-## `batchAudit(urls: string[], options?: BatchOptions): Promise<BatchAuditReport>`
+Behavior:
 
-Audits multiple URLs. `BatchOptions` extends `AuditOptions` (minus `url`) with `concurrency` (default 1 — sequential). Report order always matches input order regardless of concurrency.
+- Checks execute in parallel via `Promise.allSettled`. A check that **throws** becomes a score-0 `CheckResult` whose findings contain the error — `audit` itself never rejects for a check failure.
+- All HTTP requests in a run share an in-memory cache keyed on URL + normalized request headers (`Vary`-aware).
+- The homepage is fetched once and passed to every check as `ctx.html` / `ctx.headers`.
+
+```typescript
+const report = await audit({ url: 'https://example.com' });
+report.overallScore; // number 0–100, weighted
+report.grade;        // { min, label, color }
+report.results;      // CheckResult[]
+report.duration;     // ms
+```
+
+`audit` **rejects** only for an unrecoverable setup error (e.g. an invalid `url` that can't be parsed). Network failure on the homepage fetch does not reject — it surfaces as failing checks.
+
+## `batchAudit(urls, options?): Promise<BatchAuditReport>`
+
+```typescript
+function batchAudit(urls: string[], options?: BatchOptions): Promise<BatchAuditReport>;
+
+interface BatchOptions extends Omit<AuditOptions, 'url'> {
+  concurrency?: number; // max parallel audits, default 1 (sequential)
+}
+```
+
+Report order always matches input order, regardless of `concurrency`. `concurrency < 1` is treated as 1.
 
 ```typescript
 const batch = await batchAudit(urls, { concurrency: 4, retries: 2 });
-batch.summary; // { total, passed, failed, averageScore, grade }
+batch.reports;            // AuditReport[], input order
+batch.summary.total;     // number
+batch.summary.passed;    // count scoring >= 70
+batch.summary.failed;    // count scoring < 70
+batch.summary.averageScore;
+batch.summary.grade;     // Grade for the average
+```
+
+## Result shapes
+
+```typescript
+interface AuditReport {
+  url: string;
+  timestamp: string;        // ISO 8601
+  overallScore: number;     // 0–100
+  grade: Grade;
+  results: CheckResult[];
+  duration: number;         // ms
+}
+
+interface CheckResult {
+  id: string;               // e.g. 'llms-txt'
+  name: string;             // e.g. 'LLMs.txt'
+  description: string;
+  score: number;            // 0–100, clamped
+  findings: Finding[];
+  duration: number;         // ms
+}
+
+interface Finding {
+  status: 'pass' | 'warn' | 'fail';
+  message: string;
+  detail?: string;
+  hint?: string;            // remediation advice (warn/fail)
+  learnMoreUrl?: string;    // link to the matching remediation guide
+}
+
+interface Grade { min: number; label: string; color: string; }
 ```
 
 ## Scoring
 
-- `calculateOverallScore(results, metas): number` — weighted average; falls back to a plain average when all selected checks have weight 0, and returns 0 for empty input.
-- `getGrade(score): Grade` — maps a score to `{ min, label, color }`.
+```typescript
+function calculateOverallScore(results: CheckResult[], metas: CheckMeta[]): number;
+function getGrade(score: number): Grade;
+```
+
+`calculateOverallScore` computes the weighted average; it falls back to a plain average when all selected checks have weight 0, and returns 0 for empty input. `getGrade` maps a score to its `Grade`.
 
 ## Baselines
 
-- `toBaselineData(report): BaselineData` — minimal snapshot (overall + per-check scores).
-- `saveBaseline(path, report): void` / `loadBaseline(path): BaselineData` — file persistence. `loadBaseline` throws on missing or invalid files.
-- `diffBaseline(baseline, report): BaselineDiff` — per-check deltas plus `regressions` / `improvements` convenience arrays.
+```typescript
+function toBaselineData(report: AuditReport): BaselineData;
+function saveBaseline(path: string, report: AuditReport): void;   // writes JSON
+function loadBaseline(path: string): BaselineData;                 // throws on missing/invalid file
+function diffBaseline(baseline: BaselineData, report: AuditReport): BaselineDiff;
+
+interface BaselineData {
+  url: string;
+  timestamp: string;
+  overallScore: number;
+  checks: Record<string, number>; // checkId → score
+}
+
+interface BaselineDiff {
+  url: string;
+  baselineTimestamp: string;
+  currentTimestamp: string;
+  overallPrevious: number;
+  overallCurrent: number;
+  overallDelta: number;
+  checks: CheckDiff[];
+  regressions: CheckDiff[];   // delta < 0
+  improvements: CheckDiff[];  // delta > 0
+}
+```
+
+`loadBaseline` throws (does not return null) on a missing file or invalid JSON — wrap it in try/catch. Checks present now but absent from the baseline appear as new (no delta); checks removed since are ignored.
 
 ## Reporters
 
-- `renderMarkdown(report, diff?): string` — Markdown document for a single report (summary table, findings with emoji, baseline deltas).
-- `renderBatchMarkdown(batch): string` — batch summary table followed by every report.
+```typescript
+function renderMarkdown(report: AuditReport, diff?: BaselineDiff): string;
+function renderBatchMarkdown(batch: BatchAuditReport): string;
+```
 
-Terminal and HTML rendering are CLI-internal; for custom output, consume the `AuditReport` JSON shape directly.
+Both return a Markdown string (summary table + findings with status emoji; baseline deltas when a diff is passed). Terminal and HTML rendering are CLI-internal; for other formats, consume the `AuditReport` JSON directly.
 
 ## Checks registry
-
-`checks: CheckModule[]` exposes every check as `{ run(ctx), meta }`. You can run an individual check with a custom context:
 
 ```typescript
 import { checks } from 'ax-audit';
 
-const llms = checks.find((c) => c.meta.id === 'llms-txt')!;
-const result = await llms.run({
-  url: 'https://example.com',
-  html: homepageHtml,
-  headers: homepageHeaders,
-  fetch: myFetchImpl, // (url, options?: FetchOptions) => Promise<FetchResponse>
-});
+interface CheckModule {
+  run: (ctx: CheckContext) => Promise<CheckResult>;
+  meta: CheckMeta; // { id, name, description, weight }
+}
 ```
 
-`CheckContext.fetch` accepts an optional second argument `{ headers }`: custom headers merge case-insensitively over the defaults (a custom `Accept` or `User-Agent` replaces the default), and responses are cached per URL + normalized headers — mirroring HTTP `Vary` semantics.
+Run an individual check with a custom context:
+
+```typescript
+const llms = checks.find((c) => c.meta.id === 'llms-txt')!;
+const result = await llms.run({
+  url: 'https://example.com',   // no trailing slash
+  html: homepageHtml,
+  headers: homepageHeaders,     // lowercased keys
+  fetch: myFetchImpl,
+});
+
+interface CheckContext {
+  url: string;
+  html: string;
+  headers: Record<string, string>;
+  fetch: (url: string, options?: FetchOptions) => Promise<FetchResponse>;
+}
+
+interface FetchOptions { headers?: Record<string, string>; }
+
+interface FetchResponse {
+  status: number;   // 0 on network error
+  headers: Record<string, string>; // lowercased keys
+  body: string;
+  ok: boolean;
+  url: string;      // final URL after redirects
+  error?: string;   // set when status === 0
+}
+```
+
+`ctx.fetch` custom headers merge case-insensitively over the defaults (a custom `Accept` or `User-Agent` replaces the default), and responses are cached per URL + normalized headers — mirroring HTTP `Vary`. Your `fetch` implementation should never throw; model failures as `{ status: 0, ok: false, error }`.
+
+## API stability
+
+Within a major version, the exported function signatures and the `AuditReport` JSON shape are stable. Specifically:
+
+- **Stable:** `audit`, `batchAudit`, `calculateOverallScore`, `getGrade`, the baseline functions, the reporter functions, and all exported type *shapes*.
+- **May change in minor versions:** the *set* of checks (new checks are added), individual check `score`/`findings` content, and check `weight` values (new checks start at 0; reweighting is reserved for majors). Treat `results` as a list to iterate, not a fixed-length tuple.
+- **Internal:** anything not exported from `src/index.ts`, including terminal/HTML reporters and individual check modules' internals.
 
 ## Exported types
 

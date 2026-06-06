@@ -86,16 +86,26 @@ Full API and types: **[docs/api.md](docs/api.md)**.
 
 ## Documentation
 
+Start here:
+
 | Document | Contents |
 |---|---|
-| [docs/checks.md](docs/checks.md) | All 18 checks: what each validates, weights, scoring model |
+| [docs/getting-started.md](docs/getting-started.md) | First audit, reading the report, fixing in impact order |
+| [docs/concepts.md](docs/concepts.md) | The AX standards landscape — llms.txt, A2A, MCP, RSL, Content Signals, Web Bot Auth |
+
+Reference:
+
+| Document | Contents |
+|---|---|
+| [docs/checks.md](docs/checks.md) | All 18 checks with **exact scoring** per finding, weights, scoring model |
 | [docs/cli.md](docs/cli.md) | Every flag, output formats, exit codes, baseline workflow |
-| [docs/api.md](docs/api.md) | `audit`, `batchAudit`, baselines, reporters, exported types |
+| [docs/api.md](docs/api.md) | `audit`, `batchAudit`, baselines, reporters, types, API-stability policy |
 | [docs/ci.md](docs/ci.md) | GitHub Actions recipes: gates, PR comments, scheduled drift detection |
 | [docs/architecture.md](docs/architecture.md) | Pipeline design, check anatomy, how to add a check, scoring policy |
+| [docs/faq.md](docs/faq.md) | Troubleshooting, false positives, the `agent-access` verified-bots caveat |
 | [Remediation guides](https://lucioduran.com/projects/ax-audit/guides) | Step-by-step fixes for every finding |
 
-The same documentation is browsable at [lucioduran.com/projects/ax-audit/docs](https://lucioduran.com/projects/ax-audit/docs), rendered from these files.
+The same documentation is browsable at [lucioduran.com/projects/ax-audit/docs](https://lucioduran.com/projects/ax-audit/docs), rendered from these files. Contributors: see [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 
 ## Scoring
 
