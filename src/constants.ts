@@ -109,6 +109,7 @@ export const CHECK_WEIGHTS: Record<string, number> = {
   'content-negotiation': 0,
   rsl: 0,
   'agent-access': 0,
+  'crawl-efficiency': 0,
 };
 
 export const GRADES: Grade[] = [

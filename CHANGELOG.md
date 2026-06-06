@@ -2,6 +2,17 @@
 
 All notable changes to ax-audit are documented here.
 
+## [3.5.0] - 2026-06-06
+
+### Added
+
+- **crawl-efficiency check (informational)**: measures the cost of crawling your pages across three dimensions. Compression — rewards Brotli, accepts gzip/deflate/zstd (suggesting br), warns when uncompressed (−30). Conditional GET — checks for an `ETag` or `Last-Modified` validator, then issues a follow-up request with `If-None-Match` / `If-Modified-Since` and verifies the server returns `304 Not Modified` (−30 for no validator, −15 when 304 is not honored). Response size — warns on pages over 500 KB (−5) and 2 MB (−10) of decompressed HTML. The probe advertises `Accept-Encoding: br, gzip, deflate`; the conditional request reuses the per-request header support added in 3.1.0.
+- **12 new tests** (284 total).
+
+### Scoring
+
+- The new check carries **weight 0 in 3.x** (informational), consistent with 3.1.0–3.4.0.
+
 ## [3.4.0] - 2026-06-06
 
 ### Added

@@ -69,6 +69,7 @@ AI agents and LLMs are increasingly crawling, indexing, and interacting with web
 | **Content Negotiation** | Markdown for agents — `Accept: text/markdown` negotiation, `Vary: Accept`, `rel="alternate"` fallback | 0%* |
 | **RSL License** | [Really Simple Licensing](https://rslstandard.org) — robots.txt `License:` directive, `license.xml` validity, permits/payment vocabulary | 0%* |
 | **Agent Access** | Cloaking detection — probes the homepage with core AI crawler user-agents and flags blocks or reduced content that contradict robots.txt | 0%* |
+| **Crawl Efficiency** | Compression (`br`/`gzip`), conditional GET (`ETag`/`Last-Modified` → `304`), and response size | 0%* |
 
 \* Checks marked **0%** are informational in 3.x: they run and report findings but do not affect the overall score. They will gain weight in v4.0.
 
@@ -271,6 +272,7 @@ Fail on regressions using a committed baseline:
 | `content-negotiation` | Markdown via `Accept: text/markdown` (informational) |
 | `rsl` | Really Simple Licensing discovery + validation (informational) |
 | `agent-access` | AI crawler UA blocking / cloaking detection (informational) |
+| `crawl-efficiency` | Compression + conditional GET + response size (informational) |
 
 ## Testing
 
@@ -278,7 +280,7 @@ Fail on regressions using a committed baseline:
 npm test
 ```
 
-272 tests covering all 17 checks, the scorer, the HTTP fetcher (against a real local server), baseline comparison, HTML parsing utilities, and edge cases. Uses Node.js built-in test runner (`node:test`), no extra test dependencies.
+284 tests covering all 18 checks, the scorer, the HTTP fetcher (against a real local server), baseline comparison, HTML parsing utilities, and edge cases. Uses Node.js built-in test runner (`node:test`), no extra test dependencies.
 
 ## Tech Stack
 
