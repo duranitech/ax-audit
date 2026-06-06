@@ -15,6 +15,7 @@ import seoBasics, { meta as seoBasicsMeta } from './seo-basics.js';
 import tlsHttps, { meta as tlsHttpsMeta } from './tls-https.js';
 import wellKnownAi, { meta as wellKnownAiMeta } from './well-known-ai.js';
 import contentNegotiation, { meta as contentNegotiationMeta } from './content-negotiation.js';
+import rsl, { meta as rslMeta } from './rsl.js';
 
 export const checks: CheckModule[] = [
   { run: llmsTxt, meta: llmsTxtMeta },
@@ -32,4 +33,5 @@ export const checks: CheckModule[] = [
   { run: tlsHttps, meta: tlsHttpsMeta },
   { run: wellKnownAi, meta: wellKnownAiMeta },
   { run: contentNegotiation, meta: contentNegotiationMeta },
+  { run: rsl, meta: rslMeta },
 ];

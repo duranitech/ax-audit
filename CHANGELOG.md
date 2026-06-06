@@ -2,6 +2,17 @@
 
 All notable changes to ax-audit are documented here.
 
+## [3.3.0] - 2026-06-06
+
+### Added
+
+- **rsl check (informational)**: validates [Really Simple Licensing 1.0](https://rslstandard.org/rsl) — the machine-readable content-licensing standard endorsed by 1,500+ publishers (Reddit, Yahoo, Medium, O'Reilly) with infrastructure support from Cloudflare and Fastly. Discovery via all three spec mechanisms: robots.txt `License:` directive (absolute-URI enforcement per §4.4.1), HTTP `Link: rel="license"; type="application/rsl+xml"` header, and `<link rel="license" type="application/rsl+xml">` (plain CC-style license links without the RSL media type are ignored). Document validation: `application/rsl+xml` Content-Type (−5), `<rsl>` root + `https://rslstandard.org/rsl` namespace, required `url` attribute on every `<content>` (empty value allowed per §3.3), `<license>` presence, `permits`/`prohibits` type and token vocabulary (`usage`: all/ai-all/ai-train/ai-input/ai-index/search; `user`; `geo` as ISO 3166-1 alpha-2), and `payment` types.
+- **21 new tests** (260 total) covering the three discovery mechanisms, vocabulary enforcement, namespace/root/structure validation, XML-comment stripping, and score caps.
+
+### Scoring
+
+- The new check carries **weight 0 in 3.x** (informational), consistent with 3.1.0/3.2.0: no impact on existing scores or baselines until v4.0.
+
 ## [3.2.0] - 2026-06-06
 
 ### Added

@@ -67,8 +67,9 @@ AI agents and LLMs are increasingly crawling, indexing, and interacting with web
 | **Sitemap** | `sitemap.xml` (or `Sitemap:` from robots.txt) — XML validity, `<lastmod>` coverage, freshness, sitemap-index handling | 4% |
 | **AI Well-Known** | Emerging files: `/.well-known/ai.txt`, `genai.txt`, `ai-plugin.json`, `agents.json`, `nlweb.json` | 3% |
 | **Content Negotiation** | Markdown for agents — `Accept: text/markdown` negotiation, `Vary: Accept`, `rel="alternate"` fallback | 0%* |
+| **RSL License** | [Really Simple Licensing](https://rslstandard.org) — robots.txt `License:` directive, `license.xml` validity, permits/payment vocabulary | 0%* |
 
-\* **Content Negotiation** is informational in 3.x: it runs and reports findings but does not affect the overall score. It will gain weight in v4.0.
+\* Checks marked **0%** are informational in 3.x: they run and report findings but do not affect the overall score. They will gain weight in v4.0.
 
 ## Install
 
@@ -267,6 +268,7 @@ Fail on regressions using a committed baseline:
 | `sitemap` | sitemap.xml validation + freshness |
 | `well-known-ai` | Emerging AI discovery files |
 | `content-negotiation` | Markdown via `Accept: text/markdown` (informational) |
+| `rsl` | Really Simple Licensing discovery + validation (informational) |
 
 ## Testing
 
@@ -274,7 +276,7 @@ Fail on regressions using a committed baseline:
 npm test
 ```
 
-239 tests covering all 15 checks, the scorer, the HTTP fetcher (against a real local server), baseline comparison, HTML parsing utilities, and edge cases. Uses Node.js built-in test runner (`node:test`), no extra test dependencies.
+260 tests covering all 16 checks, the scorer, the HTTP fetcher (against a real local server), baseline comparison, HTML parsing utilities, and edge cases. Uses Node.js built-in test runner (`node:test`), no extra test dependencies.
 
 ## Tech Stack
 

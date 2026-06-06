@@ -107,6 +107,7 @@ export const CHECK_WEIGHTS: Record<string, number> = {
   // Informational in 3.x: reported but does not affect the overall score.
   // Will gain weight in v4.0 — score-affecting changes are treated as breaking (see CHANGELOG 3.0.0).
   'content-negotiation': 0,
+  rsl: 0,
 };
 
 export const GRADES: Grade[] = [
@@ -122,6 +123,27 @@ export const GRADES: Grade[] = [
  * Absence of a signal is neutral — it neither grants nor restricts.
  */
 export const CONTENT_SIGNALS: string[] = ['search', 'ai-input', 'ai-train'];
+
+/**
+ * Really Simple Licensing 1.0 (https://rslstandard.org/rsl): machine-readable licensing
+ * terms for content, discovered via robots.txt `License:`, HTTP `Link: rel="license"`,
+ * or `<link rel="license" type="application/rsl+xml">`.
+ */
+export const RSL_NAMESPACE = 'https://rslstandard.org/rsl';
+export const RSL_MIME = 'application/rsl+xml';
+export const RSL_PERMIT_TYPES: string[] = ['usage', 'user', 'geo'];
+export const RSL_USAGE_TOKENS: string[] = ['all', 'ai-all', 'ai-train', 'ai-input', 'ai-index', 'search'];
+export const RSL_USER_TOKENS: string[] = ['commercial', 'non-commercial', 'education', 'government', 'personal'];
+export const RSL_PAYMENT_TYPES: string[] = [
+  'purchase',
+  'subscription',
+  'training',
+  'crawl',
+  'use',
+  'contribution',
+  'attribution',
+  'free',
+];
 
 export const AGENT_JSON_REQUIRED_FIELDS: string[] = ['name', 'description', 'url', 'skills'];
 
