@@ -53,7 +53,7 @@ AI agents and LLMs are increasingly crawling, indexing, and interacting with web
 | Check | What it audits | Weight |
 |---|---|---|
 | **LLMs.txt** | `/llms.txt` presence, [llmstxt.org](https://llmstxt.org) spec, Content-Type | 11% |
-| **Robots.txt** | AI crawler configuration (40+ known crawlers), wildcard detection, partial path restrictions | 11% |
+| **Robots.txt** | AI crawler configuration (40+ known crawlers), wildcard detection, partial path restrictions, [Content Signals](https://contentsignals.org) | 11% |
 | **HTML Rendering** | Server-rendered content, semantic landmarks, SPA-shell detection, alt coverage | 9% |
 | **Structured Data** | JSON-LD on homepage (schema.org, `@graph`, entity types) | 9% |
 | **HTTP Headers** | Security headers + AI discovery `Link` headers + CORS on `.well-known` | 9% |
@@ -253,7 +253,7 @@ Fail on regressions using a committed baseline:
 | Check ID | Use with `--checks` |
 |---|---|
 | `llms-txt` | LLMs.txt spec + Content-Type |
-| `robots-txt` | AI crawler configuration (40+ crawlers) |
+| `robots-txt` | AI crawler configuration (40+ crawlers) + Content Signals |
 | `html-rendering` | SSR / SPA-shell detection + semantic HTML |
 | `structured-data` | JSON-LD structured data |
 | `http-headers` | Security + AI discovery headers |
@@ -274,7 +274,7 @@ Fail on regressions using a committed baseline:
 npm test
 ```
 
-229 tests covering all 15 checks, the scorer, the HTTP fetcher (against a real local server), baseline comparison, HTML parsing utilities, and edge cases. Uses Node.js built-in test runner (`node:test`), no extra test dependencies.
+239 tests covering all 15 checks, the scorer, the HTTP fetcher (against a real local server), baseline comparison, HTML parsing utilities, and edge cases. Uses Node.js built-in test runner (`node:test`), no extra test dependencies.
 
 ## Tech Stack
 

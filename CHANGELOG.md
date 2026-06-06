@@ -2,6 +2,17 @@
 
 All notable changes to ax-audit are documented here.
 
+## [3.2.0] - 2026-06-06
+
+### Added
+
+- **Content Signals Policy support in robots-txt** ([contentsignals.org](https://contentsignals.org), CC0): the check now parses `Content-Signal:` directives — the machine-readable `search` / `ai-input` / `ai-train` preferences that Cloudflare serves by default on its 3.8M+ managed robots.txt domains. Declared signals are reported per User-agent group; malformed segments, unknown signal names, and directives placed outside a User-agent group produce warnings. Absence of the directive produces an informational nudge. The group parser now also treats `Content-Signal` as a group-closing directive, fixing potential User-agent group leakage.
+- **10 new tests** (239 total) covering declaration reporting, malformed/unknown signals, shared User-agent groups, case-insensitivity, out-of-group placement, and score neutrality.
+
+### Scoring
+
+- All Content Signals findings are **informational in 3.x**: they never alter the robots-txt score, so existing scores and baselines are unchanged.
+
 ## [3.1.0] - 2026-06-06
 
 ### Added

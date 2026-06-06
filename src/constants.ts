@@ -116,6 +116,13 @@ export const GRADES: Grade[] = [
   { min: 0, label: 'Poor', color: 'red' },
 ];
 
+/**
+ * Content Signals Policy vocabulary (https://contentsignals.org, CC0): machine-readable
+ * `Content-Signal:` robots.txt directives expressing how content may be used after access.
+ * Absence of a signal is neutral — it neither grants nor restricts.
+ */
+export const CONTENT_SIGNALS: string[] = ['search', 'ai-input', 'ai-train'];
+
 export const AGENT_JSON_REQUIRED_FIELDS: string[] = ['name', 'description', 'url', 'skills'];
 
 export const SECURITY_TXT_REQUIRED_FIELDS: string[] = ['Contact', 'Expires'];
