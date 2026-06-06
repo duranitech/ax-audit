@@ -16,6 +16,7 @@ export type {
   CheckModule,
   Finding,
   FindingStatus,
+  FetchOptions,
   FetchResponse,
   Grade,
   OutputFormat,

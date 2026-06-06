@@ -66,6 +66,9 @@ AI agents and LLMs are increasingly crawling, indexing, and interacting with web
 | **TLS / HTTPS** | HTTPS, HTTP→HTTPS redirect, HSTS with `preload` + `includeSubDomains` | 5% |
 | **Sitemap** | `sitemap.xml` (or `Sitemap:` from robots.txt) — XML validity, `<lastmod>` coverage, freshness, sitemap-index handling | 4% |
 | **AI Well-Known** | Emerging files: `/.well-known/ai.txt`, `genai.txt`, `ai-plugin.json`, `agents.json`, `nlweb.json` | 3% |
+| **Content Negotiation** | Markdown for agents — `Accept: text/markdown` negotiation, `Vary: Accept`, `rel="alternate"` fallback | 0%* |
+
+\* **Content Negotiation** is informational in 3.x: it runs and reports findings but does not affect the overall score. It will gain weight in v4.0.
 
 ## Install
 
@@ -263,6 +266,7 @@ Fail on regressions using a committed baseline:
 | `tls-https` | HTTPS + HTTP→HTTPS redirect + HSTS preload |
 | `sitemap` | sitemap.xml validation + freshness |
 | `well-known-ai` | Emerging AI discovery files |
+| `content-negotiation` | Markdown via `Accept: text/markdown` (informational) |
 
 ## Testing
 
@@ -270,7 +274,7 @@ Fail on regressions using a committed baseline:
 npm test
 ```
 
-198 tests covering all 14 checks, the scorer, baseline comparison, HTML parsing utilities, and edge cases. Uses Node.js built-in test runner (`node:test`), no extra test dependencies.
+229 tests covering all 15 checks, the scorer, the HTTP fetcher (against a real local server), baseline comparison, HTML parsing utilities, and edge cases. Uses Node.js built-in test runner (`node:test`), no extra test dependencies.
 
 ## Tech Stack
 

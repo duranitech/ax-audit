@@ -18,7 +18,12 @@ export function mockResponse(overrides = {}) {
 
 /**
  * Create a mock CheckContext with a route-based fake fetch.
- * @param {Record<string, import('../dist/types.js').FetchResponse>} routes - URL pattern to response mapping
+ *
+ * A route value can be either a FetchResponse, or a function
+ * `(url, fetchOptions) => FetchResponse` for tests that need to vary the
+ * response by request headers (e.g. content negotiation on `Accept`).
+ *
+ * @param {Record<string, import('../dist/types.js').FetchResponse | Function>} routes - URL pattern to response (or responder) mapping
  * @param {object} options - Additional context options
  */
 export function mockContext(routes = {}, options = {}) {
@@ -26,9 +31,11 @@ export function mockContext(routes = {}, options = {}) {
     url: options.url || 'https://example.com',
     html: options.html || '',
     headers: options.headers || {},
-    fetch: async (url) => {
+    fetch: async (url, fetchOptions) => {
       for (const [pattern, response] of Object.entries(routes)) {
-        if (url.includes(pattern)) return response;
+        if (url.includes(pattern)) {
+          return typeof response === 'function' ? response(url, fetchOptions) : response;
+        }
       }
       return mockResponse({ status: 404, ok: false, body: '', url });
     },

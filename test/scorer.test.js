@@ -52,6 +52,34 @@ describe('scorer', () => {
       assert.equal(calculateOverallScore(results, metas), 70);
     });
 
+    it('should ignore weight-0 (informational) checks in the weighted average', () => {
+      const results = [
+        { id: 'a', name: 'A', description: '', score: 80, findings: [], duration: 0 },
+        { id: 'info', name: 'Info', description: '', score: 0, findings: [], duration: 0 },
+      ];
+      const metas = [
+        { id: 'a', name: 'A', description: '', weight: 50 },
+        { id: 'info', name: 'Info', description: '', weight: 0 },
+      ];
+      assert.equal(calculateOverallScore(results, metas), 80);
+    });
+
+    it('should fall back to a plain average when all selected checks have weight 0', () => {
+      const results = [
+        { id: 'info1', name: 'Info1', description: '', score: 100, findings: [], duration: 0 },
+        { id: 'info2', name: 'Info2', description: '', score: 50, findings: [], duration: 0 },
+      ];
+      const metas = [
+        { id: 'info1', name: 'Info1', description: '', weight: 0 },
+        { id: 'info2', name: 'Info2', description: '', weight: 0 },
+      ];
+      assert.equal(calculateOverallScore(results, metas), 75);
+    });
+
+    it('should return 0 for empty inputs without dividing by zero', () => {
+      assert.equal(calculateOverallScore([], []), 0);
+    });
+
     it('should clamp result between 0 and 100', () => {
       const results = [
         { id: 'a', name: 'A', description: '', score: 150, findings: [], duration: 0 },

@@ -2,6 +2,22 @@
 
 All notable changes to ax-audit are documented here.
 
+## [3.1.0] - 2026-06-06
+
+### Added
+
+- **content-negotiation check (informational)**: probes the homepage with `Accept: text/markdown` to detect Markdown for Agents support — the pattern implemented by Cloudflare and Vercel and requested by Claude Code, Cursor, and OpenCode. Validates the negotiated `Content-Type`, that the body is actual Markdown (not a relabeled HTML document), `Vary: Accept` presence (shared-cache correctness), and reports the size reduction vs the HTML representation. Falls back to detecting `<link rel="alternate" type="text/markdown">` for partial credit.
+- **Per-request fetch headers**: `CheckContext.fetch` now accepts an optional `{ headers }` argument. Custom headers merge case-insensitively over the defaults, and the in-memory cache keys on URL + normalized headers, mirroring `Vary` semantics on the wire. New exported type: `FetchOptions`.
+- **31 new tests** (229 total): content-negotiation suite (19), fetcher integration suite against a real local HTTP server (9), and scorer coverage for weight-0 checks (3).
+
+### Fixed
+
+- **Scorer division by zero**: `calculateOverallScore` returned `NaN` when every selected check had weight 0 (e.g. `--checks content-negotiation`). It now falls back to a plain average, and returns 0 for empty input.
+
+### Scoring
+
+- The new check carries **weight 0 in 3.x**: it runs and reports findings but does not affect the overall score, so existing scores and baselines are unchanged. It will gain weight in v4.0, consistent with treating score-affecting changes as breaking (see 3.0.0).
+
 ## [3.0.0] - 2026-04-30
 
 ### Added — five new checks (full agent-optimization coverage)

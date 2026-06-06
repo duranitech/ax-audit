@@ -33,9 +33,19 @@ export interface FetchResponse {
   error?: string;
 }
 
+/** Per-request options for the audit fetcher. */
+export interface FetchOptions {
+  /**
+   * Extra request headers. Merged over the fetcher defaults, so a custom
+   * `Accept` (e.g. `text/markdown` for content-negotiation probes) replaces
+   * the default one. Header names are case-insensitive.
+   */
+  headers?: Record<string, string>;
+}
+
 export interface CheckContext {
   url: string;
-  fetch: (url: string) => Promise<FetchResponse>;
+  fetch: (url: string, options?: FetchOptions) => Promise<FetchResponse>;
   html: string;
   headers: Record<string, string>;
 }

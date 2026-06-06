@@ -104,6 +104,9 @@ export const CHECK_WEIGHTS: Record<string, number> = {
   'tls-https': 5,
   sitemap: 4,
   'well-known-ai': 3,
+  // Informational in 3.x: reported but does not affect the overall score.
+  // Will gain weight in v4.0 — score-affecting changes are treated as breaking (see CHANGELOG 3.0.0).
+  'content-negotiation': 0,
 };
 
 export const GRADES: Grade[] = [
