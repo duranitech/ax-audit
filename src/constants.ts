@@ -108,6 +108,7 @@ export const CHECK_WEIGHTS: Record<string, number> = {
   // Will gain weight in v4.0 — score-affecting changes are treated as breaking (see CHANGELOG 3.0.0).
   'content-negotiation': 0,
   rsl: 0,
+  'agent-access': 0,
 };
 
 export const GRADES: Grade[] = [

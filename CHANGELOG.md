@@ -2,6 +2,18 @@
 
 All notable changes to ax-audit are documented here.
 
+## [3.4.0] - 2026-06-06
+
+### Added
+
+- **agent-access check (informational)**: cloaking and blocking detection. Probes the homepage with realistic user-agents for each of the 8 core AI crawlers (GPTBot, ClaudeBot, ChatGPT-User, Claude-SearchBot, Google-Extended, PerplexityBot, OAI-SearchBot, CCBot) and compares status and visible-text volume against the default-UA baseline. Flags the failure mode invisible to operators: robots.txt allows a crawler while the WAF returns 403 to its user-agent (Cloudflare's "Block AI Crawlers" toggle produces exactly this). Blocks consistent with an explicit robots.txt `Disallow` (or wildcard block) are reported as intentional and not penalized. Responses with under 50% of baseline visible text count as reduced content (half credit); content comparison is skipped for baselines under 200 chars to avoid SPA-shell noise. Hints note the verified-bots caveat: WAFs using Web Bot Auth / IP verification may pass the real crawler while rejecting this unverified probe.
+- `parseUserAgents` and `BotEntry` are now exported from the robots-txt check for reuse.
+- **12 new tests** (272 total).
+
+### Scoring
+
+- Internal score is the credit ratio across the 8 probes; the check carries **weight 0 in 3.x** (informational), consistent with 3.1.0–3.3.0.
+
 ## [3.3.0] - 2026-06-06
 
 ### Added

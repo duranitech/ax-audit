@@ -10,7 +10,7 @@ export const meta: CheckMeta = {
   weight: 11,
 };
 
-interface BotEntry {
+export interface BotEntry {
   name: string;
   disallowed: boolean;
   hasRestrictions: boolean;
@@ -149,7 +149,7 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
   return buildResult(meta, score, findings, start);
 }
 
-function parseUserAgents(text: string): BotEntry[] {
+export function parseUserAgents(text: string): BotEntry[] {
   const entries: BotEntry[] = [];
   let currentGroup: BotEntry[] = [];
   let inDirectives = false;

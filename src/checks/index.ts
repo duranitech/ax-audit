@@ -16,6 +16,7 @@ import tlsHttps, { meta as tlsHttpsMeta } from './tls-https.js';
 import wellKnownAi, { meta as wellKnownAiMeta } from './well-known-ai.js';
 import contentNegotiation, { meta as contentNegotiationMeta } from './content-negotiation.js';
 import rsl, { meta as rslMeta } from './rsl.js';
+import agentAccess, { meta as agentAccessMeta } from './agent-access.js';
 
 export const checks: CheckModule[] = [
   { run: llmsTxt, meta: llmsTxtMeta },
@@ -34,4 +35,5 @@ export const checks: CheckModule[] = [
   { run: wellKnownAi, meta: wellKnownAiMeta },
   { run: contentNegotiation, meta: contentNegotiationMeta },
   { run: rsl, meta: rslMeta },
+  { run: agentAccess, meta: agentAccessMeta },
 ];
