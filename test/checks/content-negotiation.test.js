@@ -26,19 +26,24 @@ describe('content-negotiation', () => {
     assert.equal(meta.weight, 0);
   });
 
-  it('should request the homepage with Accept: text/markdown', async () => {
+  it('should probe with the Accept header a real agent sends', async () => {
     let seenAccept = null;
     const ctx = mockContext(
       {
         'https://example.com': (url, fetchOptions) => {
-          seenAccept = fetchOptions?.headers?.Accept;
+          // The check makes several probes; only the first is the Accept probe.
+          seenAccept ??= fetchOptions?.headers?.Accept ?? null;
           return mockResponse({ body: HTML_PAGE, headers: { 'content-type': 'text/html' }, url });
         },
       },
       { html: HTML_PAGE },
     );
     await check(ctx);
-    assert.equal(seenAccept, 'text/markdown');
+    // Claude Code, Cursor and OpenCode all send a q-weighted list with HTML as
+    // the fallback. Probing with a bare `text/markdown` would pass against a
+    // negotiation implementation that fails every real request.
+    assert.ok(seenAccept.startsWith('text/markdown'));
+    assert.ok(seenAccept.includes('text/html;q='), 'the probe must include the HTML fallback a real client sends');
   });
 
   it('should score 100 for proper negotiation with Vary: Accept', async () => {
@@ -225,5 +230,103 @@ describe('content-negotiation', () => {
     const ctx = mockContext({ 'https://example.com': negotiatingServer() }, { html: HTML_PAGE });
     const result = await check(ctx);
     assert.ok(result.score >= 0 && result.score <= 100);
+  });
+});
+
+describe('content-negotiation: extended reporting', () => {
+  const MARKDOWN = '---\ntitle: Acme\ncanonical_url: https://example.com/\nlast_updated: 2026-09-01\n---\n\n# Acme\n\nContent.';
+  const MD_HEADERS = { 'content-type': 'text/markdown', vary: 'Accept' };
+
+  function negotiating(extraHeaders = {}, body = MARKDOWN) {
+    return mockContext(
+      {
+        'https://example.com': (url, fetchOptions) => {
+          const accept = fetchOptions?.headers?.Accept ?? '';
+          if (accept.includes('text/markdown')) {
+            return mockResponse({ body, headers: { ...MD_HEADERS, ...extraHeaders }, url });
+          }
+          return mockResponse({ body: '<html><body>HTML</body></html>', headers: { 'content-type': 'text/html' }, url });
+        },
+      },
+      { html: '<html><body>' + 'x'.repeat(2000) + '</body></html>' },
+    );
+  }
+
+  it('should prefer the origin-reported token counts over a byte ratio', async () => {
+    const result = await check(negotiating({ 'x-markdown-tokens': '500', 'x-original-tokens': '4000' }));
+    const finding = result.findings.find((f) => f.message.includes('tokens against'));
+    assert.ok(finding);
+    assert.ok(finding.message.includes('88% saved'));
+    assert.ok(finding.detail.includes('x-markdown-tokens'));
+  });
+
+  it('should fall back to comparing sizes when no token counts are given', async () => {
+    const result = await check(negotiating());
+    assert.ok(result.findings.some((f) => f.message.includes('lighter than the HTML representation')));
+  });
+
+  it('should warn when the origin reports no saving', async () => {
+    const result = await check(negotiating({ 'x-markdown-tokens': '4000', 'x-original-tokens': '4000' }));
+    const finding = result.findings.find((f) => f.message.includes('tokens against'));
+    assert.equal(finding.status, 'warn');
+  });
+
+  it('should report the frontmatter fields that make a quotation attributable', async () => {
+    const result = await check(negotiating());
+    const finding = result.findings.find((f) => f.message.includes('frontmatter carries'));
+    assert.ok(finding);
+    assert.ok(finding.message.includes('title'));
+    assert.ok(finding.message.includes('canonical_url'));
+    assert.ok(finding.message.includes('last_updated'));
+  });
+
+  it('should warn when the Markdown carries no frontmatter', async () => {
+    const result = await check(negotiating({}, '# Acme\n\nContent.'));
+    const finding = result.findings.find((f) => f.message.includes('no frontmatter'));
+    assert.ok(finding);
+    assert.ok(finding.hint.includes('cannot attribute what it quotes'));
+  });
+
+  it('should warn about frontmatter with nothing attributable in it', async () => {
+    const result = await check(negotiating({}, '---\nlayout: docs\n---\n\n# Acme'));
+    assert.ok(result.findings.some((f) => f.message.includes('carries no title, canonical URL or date')));
+  });
+
+  it('should note a canonical Link header on the Markdown response', async () => {
+    const result = await check(negotiating({ link: '<https://example.com/>; rel="canonical"' }));
+    assert.ok(result.findings.some((f) => f.message.includes('canonical Link header')));
+  });
+
+  it('should detect user-agent negotiation when Accept negotiation fails', async () => {
+    const ctx = mockContext(
+      {
+        'https://example.com': (url, fetchOptions) => {
+          const ua = fetchOptions?.headers?.['User-Agent'] ?? '';
+          if (ua.includes('Claude-Code')) {
+            return mockResponse({ body: MARKDOWN, headers: { 'content-type': 'text/markdown' }, url });
+          }
+          return mockResponse({ body: '<html></html>', headers: { 'content-type': 'text/html' }, url });
+        },
+      },
+      { html: '<html></html>' },
+    );
+    const result = await check(ctx);
+    const finding = result.findings.find((f) => f.message.includes('recognised agent user agent'));
+    assert.ok(finding);
+    assert.ok(finding.hint.includes('whose user agent you have never seen'));
+  });
+
+  it('should detect a .md suffix URL when negotiation fails', async () => {
+    const ctx = mockContext(
+      {
+        '/index.md': mockResponse({ body: MARKDOWN, headers: { 'content-type': 'text/markdown' } }),
+        'https://example.com': mockResponse({ body: '<html></html>', headers: { 'content-type': 'text/html' } }),
+      },
+      { html: '<html></html>' },
+    );
+    const result = await check(ctx);
+    const finding = result.findings.find((f) => f.message.includes('suffix URL /index.md'));
+    assert.ok(finding);
+    assert.ok(finding.detail.includes('second request'));
   });
 });

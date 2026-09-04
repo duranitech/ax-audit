@@ -120,3 +120,140 @@ describe('llms-txt', () => {
     assert.ok(result.score <= 100);
   });
 });
+
+describe('llms-txt: v2 features and link health', () => {
+  const GOOD = [
+    '# Acme',
+    '',
+    '> Everything Acme does, for agents.',
+    '',
+    '## Docs',
+    '',
+    '- [Getting started](https://example.com/docs/start)',
+    '- [API](https://example.com/docs/api)',
+  ].join('\n');
+
+  const TXT_HEADERS = { 'content-type': 'text/plain' };
+
+  function ctx({ body = GOOD, routes = {}, html = '', headers = {} } = {}) {
+    return mockContext(
+      {
+        '/llms.txt': mockResponse({ body, headers: TXT_HEADERS }),
+        'https://example.com/docs/start': mockResponse({ body: 'ok' }),
+        'https://example.com/docs/api': mockResponse({ body: 'ok' }),
+        ...routes,
+      },
+      { html, headers },
+    );
+  }
+
+  it('should confirm sampled links resolve', async () => {
+    const result = await check(ctx());
+    assert.ok(result.findings.some((f) => f.message.includes('2 sampled link(s) resolve')));
+  });
+
+  it('should fail broken links without changing the score', async () => {
+    const result = await check(
+      ctx({ routes: { 'https://example.com/docs/api': mockResponse({ status: 404, ok: false, body: '' }) } }),
+    );
+    const finding = result.findings.find((f) => f.message.includes('sampled llms.txt link(s) are broken'));
+    assert.ok(finding);
+    assert.equal(finding.status, 'fail');
+    assert.ok(finding.hint.includes('wastes exactly the budget it was meant to save'));
+
+    const clean = await check(ctx());
+    assert.equal(result.score, clean.score, 'a new finding inside a weighted check must be informational in 3.x');
+  });
+
+  it('should report redirecting links separately from dead ones', async () => {
+    const result = await check(
+      ctx({
+        routes: {
+          'https://example.com/docs/api': mockResponse({
+            status: 301,
+            ok: false,
+            redirectLocation: 'https://example.com/docs/api/v2',
+            body: '',
+          }),
+        },
+      }),
+    );
+    const finding = result.findings.find((f) => f.message.includes('sampled link(s) redirect'));
+    assert.ok(finding);
+    assert.ok(finding.hint.includes('round trip the agent pays for'));
+    assert.ok(!result.findings.some((f) => f.message.includes('are broken')));
+  });
+
+  it('should fall back to GET when an origin refuses HEAD', async () => {
+    const result = await check(
+      ctx({
+        routes: {
+          'https://example.com/docs/api': (url, options) =>
+            options?.method === 'HEAD'
+              ? mockResponse({ status: 405, ok: false, body: '' })
+              : mockResponse({ body: 'ok' }),
+        },
+      }),
+    );
+    assert.ok(!result.findings.some((f) => f.message.includes('are broken')));
+  });
+
+  it('should report duplicate links', async () => {
+    const body = `${GOOD}\n- [API again](https://example.com/docs/api)`;
+    const result = await check(ctx({ body }));
+    assert.ok(result.findings.some((f) => f.message.includes('1 duplicate link(s)')));
+  });
+
+  it('should detect a describedby relation in the HTML', async () => {
+    const result = await check(ctx({ html: '<html><head><link rel="describedby" href="/llms.txt"></head></html>' }));
+    assert.ok(result.findings.some((f) => f.message.includes('rel="describedby"') && f.status === 'pass'));
+  });
+
+  it('should detect a describedby relation in the Link header', async () => {
+    const result = await check(ctx({ headers: { link: '</llms.txt>; rel="describedby"' } }));
+    assert.ok(result.findings.some((f) => f.message.includes('Link header') && f.status === 'pass'));
+  });
+
+  it('should nudge when nothing points at the llms.txt', async () => {
+    const result = await check(ctx());
+    const finding = result.findings.find((f) => f.message.includes('No rel="describedby"'));
+    assert.ok(finding);
+    assert.ok(finding.hint.includes('landed on a deep page'));
+  });
+
+  it('should detect a per-page Markdown mirror', async () => {
+    const result = await check(ctx({ routes: { '/index.md': mockResponse({ body: '# Acme\n\nContent.' }) } }));
+    assert.ok(result.findings.some((f) => f.message.includes('Markdown mirror available at /index.md')));
+  });
+
+  it('should not accept an HTML shell as a Markdown mirror', async () => {
+    const result = await check(ctx({ routes: { '/index.md': mockResponse({ body: '<!doctype html><html></html>' }) } }));
+    assert.ok(result.findings.some((f) => f.message.includes('No per-page Markdown mirror')));
+  });
+
+  it('should warn about an oversized index', async () => {
+    const body = `${GOOD}\n${'filler text. '.repeat(5000)}`;
+    const result = await check(ctx({ body }));
+    const finding = result.findings.find((f) => f.message.includes('KB'));
+    assert.ok(finding);
+    assert.ok(finding.hint.includes('competes with the content it points at'));
+  });
+
+  it('should state plainly who reads this file', async () => {
+    const result = await check(ctx());
+    const finding = result.findings.find((f) => f.message.includes('Consumer note'));
+    assert.ok(finding);
+    assert.ok(finding.detail.includes('Search ignores llms.txt'));
+    assert.ok(finding.detail.includes('Claude Code'));
+  });
+
+  it('should keep the 3.6 scoring exactly', async () => {
+    const result = await check(
+      mockContext({
+        '/llms.txt': mockResponse({ body: GOOD, headers: TXT_HEADERS }),
+        '/llms-full.txt': mockResponse({ body: '# Acme full' }),
+      }),
+    );
+    assert.equal(result.score, 100, 'H1 + blockquote + sections + links + llms-full bonus');
+  });
+});
