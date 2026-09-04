@@ -39,9 +39,13 @@ npx ax-audit https://your-site.com --only-failures
 
 AI agents interact with your site differently than browsers: most don't execute JavaScript, they look for machine-readable discovery files, and they respect (or at least read) your declared crawler policy. The audit measures three layers — if you're new to the standards involved (llms.txt, A2A, MCP, RSL, Content Signals), read [concepts.md](./concepts.md) first:
 
-1. **Can agents find and read your content?** (`html-rendering`, `robots-txt`, `sitemap`, `tls-https`, `agent-access`)
-2. **Did you publish the AI-specific surface?** (`llms-txt`, `agent-json`, `mcp`, `openapi`, `well-known-ai`, `meta-tags`, `structured-data`)
-3. **Is the interaction efficient and well-governed?** (`content-negotiation`, `crawl-efficiency`, `rsl`, Content Signals, `http-headers`, `security-txt`, `seo-basics`)
+1. **Content** — is there substance an agent can read, and can a browser agent act on it? (`html-rendering`, `agent-operability`, `structured-data`, `seo-basics`, `content-negotiation`)
+2. **Access** — can an agent actually retrieve it? (`agent-access`, `ai-directives`, `http-hygiene`, `tls-https`, `crawl-efficiency`)
+3. **Discovery** — can an agent find your machine-readable files? (`robots-txt`, `llms-txt`, `http-headers`, `sitemap`, `meta-tags`)
+4. **Policy** — what usage rights do you declare, and do they agree? (`usage-policy`, `security-txt`, `rsl`)
+5. **Protocols** — what can an agent call? (`api-discovery`, `agent-card`, `mcp-discovery`, `agent-skills`, `auth-discovery`)
+
+Protocol checks are conditional: if your site has no API to describe and no MCP server, they report **n/a** and leave the score alone rather than counting as failures.
 
 ## 3. Fix in impact order
 
@@ -49,14 +53,17 @@ The fastest path from Fair to Good, by weight and typical effort:
 
 | Step | Check | Weight | Typical effort |
 | --- | --- | --- | --- |
-| 1 | Create `/llms.txt` | 11% | 30 minutes — it's a Markdown file. `npx ax-init` generates it. |
-| 2 | Configure `robots.txt` for the 8 core AI crawlers | 11% | 15 minutes; `npx ax-init` generates this too |
-| 3 | Verify server-rendered content | 9% | Free if you SSR; significant if you ship an SPA shell |
-| 4 | Add JSON-LD structured data | 9% | 1–2 hours |
-| 5 | Security + discovery headers | 9% | 30 minutes of server config |
-| 6 | `agent.json` + `mcp.json` | 14% combined | An hour with the spec links in the guides |
+| 1 | Verify server-rendered content | 11% | Free if you already render on the server; significant if you ship an SPA shell. Nothing else matters if an agent sees an empty page. |
+| 2 | Confirm nothing blocks AI crawlers | 9% | 15 minutes in your WAF. Check `agent-access` first: your robots.txt may say one thing and your firewall another. |
+| 3 | Configure `robots.txt` for the 12 core AI crawlers | 9% | 15 minutes; `npx ax-init` generates it |
+| 4 | Name your buttons and label your inputs | 7% | Hours to days, and it is accessibility work you owed anyway |
+| 5 | Check your page-level AI directives | 6% | 10 minutes. A stray `nosnippet` removes you from AI Overviews. |
+| 6 | Add JSON-LD structured data | 6% | 1–2 hours |
+| 7 | Create `/llms.txt` | 5% | 30 minutes — it is a Markdown file. Read the check's note on who actually fetches it first. |
 
-The remaining weighted checks (`seo-basics`, `security-txt`, `meta-tags`, `openapi`, `tls-https`, `sitemap`, `well-known-ai`) are mostly configuration; the remediation guides give exact snippets for Nginx, Vercel, Netlify, and Express.
+Steps 1 and 2 are the ones worth doing today. They are also the two most likely to be silently broken: a hydration-only page and a firewall rule are both invisible from inside the site.
+
+The remaining checks (`seo-basics`, `content-negotiation`, `usage-policy`, `http-hygiene`, `http-headers`, `security-txt`, `tls-https`, `sitemap`, `crawl-efficiency`, `rsl`, `meta-tags`) are mostly configuration; the remediation guides give exact snippets for Nginx, Vercel, Netlify, and Express.
 
 Re-run after each fix — all requests are cached per run, so audits are fast and cheap.
 
@@ -91,11 +98,11 @@ npx ax-audit https://your-site.com --checks agent-access
 
 - **"My score seems harsh."** The audit measures the AI-agent surface, not site quality. A beautiful SPA with no llms.txt, no structured data, and an empty `#root` div is genuinely poor AX — that's the point of the tool.
 - **"A check crashed / network error."** Transient failures retry automatically (`--retries`, default 2). For slow staging environments raise `--timeout`.
-- **"Which findings are safe to ignore?"** See the [FAQ](./faq.md) — notably the `agent-access` verified-bots caveat and `well-known-ai`, which is coverage bonus rather than baseline.
+- **"Which findings are safe to ignore?"** See the [FAQ](./faq.md) — notably the `agent-access` verified-bots caveat, and the checks resting on draft specifications, which never affect your score.
 
 ## Next steps
 
-- [checks.md](./checks.md) — exact scoring of all 18 checks
+- [checks.md](./checks.md) — exact scoring of all 26 checks, with the weight table
 - [concepts.md](./concepts.md) — the AX standards landscape explained
 - [cli.md](./cli.md) — every flag · [ci.md](./ci.md) — CI recipes · [api.md](./api.md) — programmatic use
 - [ax-init](https://github.com/lucioduran/ax-init) — generates most of the files this tool audits

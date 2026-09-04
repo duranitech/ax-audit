@@ -224,7 +224,7 @@ AI meta tags (`ai:summary`, `ai:content_type`, `ai:author`, `ai:api`, `ai:agent_
 | 0 AI meta tags | −18 |
 | Only 1–2 AI meta tags | −12 |
 | No `rel="alternate"` → llms.txt | −12 |
-| No `rel="alternate"` → agent.json | −8 |
+| No `rel="alternate"` → the Agent Card | −8 |
 | No `rel="me"` identity links | −8 |
 | No Open Graph tags at all | −12 |
 | OG required incomplete (`og:title`, `og:description`, `og:url`, `og:type`) | −8 |
@@ -295,21 +295,13 @@ Located via robots.txt `Sitemap:` or `/sitemap.xml`. Limits: 50,000 URLs / 50 MB
 | `<lastmod>` coverage < 50% | −5 |
 | Newest `<lastmod>` older than 365 days | −5 |
 
-### `well-known-ai` — 3%
-
-Emerging AI discovery files. **Purely proportional** — no deductions:
-
-```
-score = round(present / 5 × 100)
-```
-
-over `/.well-known/ai.txt` (Spawning), `/.well-known/genai.txt`, `/ai-plugin.json`, `/agents.json`, `/.well-known/nlweb.json`. Files with invalid content produce warnings without counting as present.
-
 ---
 
-## Informational checks (weight 0 in 3.x)
+## Checks on draft specifications (weight 0)
 
-These run on every audit and report full findings, but do not affect the overall score or baselines. They gain weight in v4.0.
+`ai-catalog`, `webmcp` and `commerce-discovery` run on every audit and report full findings, but never affect the score. Each rests on a specification that is still a draft and may be renamed; scoring a site against one would make the number less trustworthy, not more.
+
+`well-known-ai` was removed in 4.0. Re-verification found three of its five scored files had no consumer: `/.well-known/nlweb.json` appears in no NLWeb release, `genai.txt` has no specification, and `/ai-plugin.json` described a product shut down in 2024. Its live probes moved into the checks that own them — TDMRep into `usage-policy`, the Web Bot Auth key directory and `AGENTS.md` into the reporting they belong to.
 
 ### `content-negotiation` — Markdown for Agents
 

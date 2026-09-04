@@ -17,28 +17,43 @@ npx ax-audit https://your-site.com
 
 ```
   AX Audit Report
-  https://lucioduran.com
+  https://example.com
 
-  ███████████████████████████████████░░░░░  88/100  Good
+  █████████████████████████████████░░░░░░░  83/100  Good
 
-  LLMs.txt (100/100)
-    PASS  /llms.txt exists
-    PASS  /llms.txt Content-Type OK (text/plain)
-    PASS  H1 heading: "Lucio Duran — Personal Portfolio"
+  ── Content — is there substance an agent can read?
 
-  Robots.txt (100/100)
-    PASS  All 8 core AI crawlers explicitly configured
-    PASS  Content signals declared for User-agent: * — search=yes, ai-train=no
+  Structured Data (90/100)
+  PASS  3 JSON-LD block(s) found
+  WARN  1 structured-data value(s) do not appear in the visible text
+         💡 Google's one explicit requirement for structured data and AI
+            features is that it match what a reader sees.
 
-  Content Negotiation (100/100)
-    PASS  Homepage serves Markdown via content negotiation (Accept: text/markdown)
-    PASS  Markdown is ~95% lighter than the HTML representation
+  ── Access — can an agent actually retrieve it?
+
+  Agent Access (100/100)
+  PASS  All 10 core AI crawler user-agents receive the same page as a regular client
+
+  AI Directives (100/100)
+  PASS  Homepage is indexable
+  PASS  No directive restricts how AI assistants may use this page
+
+  ── Protocols — what can an agent call?
+
+  MCP Discovery (n/a)
+  PASS  No MCP server — MCP discovery does not apply to this site
   ...
 ```
 
 ## Why
 
-AI agents and LLMs are increasingly crawling, indexing, and interacting with websites. Just like Lighthouse audits web performance and axe-core audits accessibility, **ax-audit** tells you how ready your site is for the AI agent ecosystem — discovery files, crawler policy, licensing, content negotiation, and the failure modes invisible to operators (like a WAF blocking crawlers your robots.txt allows).
+AI agents crawl, cite and act on websites. Lighthouse audits performance, axe-core audits accessibility, and **ax-audit** tells you how ready your site is for agents — discovery files, crawler policy, usage rights, content negotiation, and the failures that are invisible from the inside:
+
+- Your robots.txt allows GPTBot and your firewall returns 403 to it.
+- You blocked `Google-Extended` expecting to leave AI Overviews. It does not do that.
+- Your robots.txt permits AI training while your RSL licence prohibits it, so which terms apply depends on which file a crawler read.
+- Your content only exists after hydration, so the crawlers that do not run JavaScript see an empty page.
+- A missing page answers `200 OK`, so an agent stores the apology as the answer.
 
 ## What it checks
 
@@ -100,8 +115,8 @@ Reference:
 
 | Document | Contents |
 |---|---|
-| [docs/checks.md](docs/checks.md) | All 18 checks with **exact scoring** per finding, weights, scoring model |
-| [docs/cli.md](docs/cli.md) | Every flag, output formats, exit codes, baseline workflow |
+| [docs/checks.md](docs/checks.md) | All 26 checks with **exact scoring** per finding, the weight table, and the conditional-check rule |
+| [docs/cli.md](docs/cli.md) | Every flag, profiles, area filters, per-area CI gates, baseline workflow |
 | [docs/api.md](docs/api.md) | `audit`, `batchAudit`, baselines, reporters, types, API-stability policy |
 | [docs/ci.md](docs/ci.md) | GitHub Actions recipes: gates, PR comments, scheduled drift detection |
 | [docs/architecture.md](docs/architecture.md) | Pipeline design, check anatomy, how to add a check, scoring policy |
@@ -119,9 +134,13 @@ The same documentation is browsable at [lucioduran.com/projects/ax-audit/docs](h
 | Fair | 50–69 | `1` |
 | Poor | 0–49 | `1` |
 
+Checks that do not apply to a site report **n/a** and leave the denominator entirely, rather than scoring 0. A blog is not marked down for having no API to describe. Everything counted against a site is something the site could have done — which is what makes a low score worth acting on.
+
+`--fail-on-category access:70` gates CI per area, because an overall score can hide an area that is entirely broken while the other four carry it.
+
 ## Tech
 
-TypeScript strict mode · 2 runtime dependencies (`chalk`, `commander`) · Node 18+ built-in `fetch` · parallel checks via `Promise.allSettled` · per-run request cache with `Vary`-aware keys · transient-failure retries with backoff · 301 tests on `node:test` with zero test dependencies.
+TypeScript strict mode · 2 runtime dependencies (`chalk`, `commander`) · Node 18+ built-in `fetch` · no HTML, XML or YAML parser dependencies · parallel checks via `Promise.allSettled` · per-run request cache with `Vary`-aware keys · transient-failure retries with backoff · 873 tests on `node:test` with zero test dependencies.
 
 ## Contributing
 

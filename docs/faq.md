@@ -24,9 +24,21 @@ Weighted checks (14) sum to 100% and determine your overall score. Informational
 
 This is the most important caveat in the tool. ax-audit's probe sends a user-agent *containing* the crawler token (e.g. `...GPTBot/1.0`) but it is **not** the real, verified crawler. If your WAF verifies bots cryptographically ([Web Bot Auth](./concepts.md)) or by IP range, it will correctly pass the genuine GPTBot while rejecting ax-audit's unverified probe. **Before changing any WAF rule, confirm against your WAF logs** whether real crawler traffic is actually being served. If it is, this finding is a false positive for your setup.
 
-### `well-known-ai` is low — should I worry?
+### Where did `well-known-ai` go?
 
-No. It's scored as *coverage bonus* over five emerging, partly-competing files (`ai.txt`, `genai.txt`, `ai-plugin.json`, `agents.json`, `nlweb.json`). None is universally adopted; a low score here is not a defect. Implement the ones relevant to your stack.
+Removed in 4.0. Three of the five files it scored turned out to have no consumer at all: `/.well-known/nlweb.json` appears in no NLWeb release, document or commit; `genai.txt` has no specification; and `/ai-plugin.json` described ChatGPT plugins, shut down in April 2024. Marking a site down for omitting a file nobody specified is worse than not checking it.
+
+### A check says `n/a` — is that bad?
+
+No, it is the point. A blog has no API to describe and no MCP server to advertise, so those checks report `n/a` and leave the score entirely rather than counting as failures. Everything counted against your site is something your site could have done.
+
+If you are *planning* to build one of those surfaces and want it audited anyway, use `--profile api`, `--profile mcp`, or `--profile all`.
+
+### My score changed after upgrading to 4.0
+
+Expected. 4.0 redistributed the weights and made protocol checks conditional. Sites with no API or MCP surface generally rise, because they are no longer marked down for lacking things they do not have.
+
+Your saved baseline still works, but regression gating is suspended until you re-save it: comparing across a scoring change would report regressions your site did not cause. Run `ax-audit <url> --save-baseline .ax-baseline.json` to resume gating.
 
 ### `crawl-efficiency` says no compression, but my CDN compresses
 
@@ -70,7 +82,7 @@ Yes — `import { audit } from 'ax-audit'` returns a typed `AuditReport`. See [a
 
 ### How do I generate the files ax-audit checks for?
 
-Use [ax-init](https://github.com/lucioduran/ax-init) — it generates `llms.txt`, `robots.txt`, `agent.json`, `mcp.json`, `security.txt`, structured data, and header snippets, then you verify with `npx ax-audit`.
+Use [ax-init](https://github.com/lucioduran/ax-init) — it generates `llms.txt`, `robots.txt`, an Agent Card, `security.txt`, structured data, and header snippets, then you verify with `npx ax-audit`. Check its output against this tool: the standards moved in 2026, and a generator written against the older paths will produce files agents no longer look for.
 
 ## Still stuck?
 
