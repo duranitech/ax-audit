@@ -1,5 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { checks as allChecks } from './checks/index.js';
+import { allIdsFor } from './check-ids.js';
 import type { AuditReport, BaselineData, BaselineDiff, CheckDiff } from './types.js';
 
 /**
@@ -64,8 +66,24 @@ export function loadBaseline(path: string): BaselineData {
  * per-check deltas and overall regression/improvement lists.
  */
 export function diffBaseline(baseline: BaselineData, report: AuditReport): BaselineDiff {
+  // A baseline saved before a check was renamed still holds the former id, so
+  // look each score up under every id that check answers to. Without this a
+  // rename reads as one check removed (a full regression) and one added at
+  // zero, which would fire `--fail-on-regression` on an unchanged site.
+  const consumedIds = new Set<string>();
+
+  const previousScoreFor = (id: string): number | undefined => {
+    for (const candidate of idsForCheck(id)) {
+      if (Object.hasOwn(baseline.checks, candidate)) {
+        consumedIds.add(candidate);
+        return baseline.checks[candidate];
+      }
+    }
+    return undefined;
+  };
+
   const checks: CheckDiff[] = report.results.map((r) => {
-    const previous = baseline.checks[r.id] ?? 0;
+    const previous = previousScoreFor(r.id) ?? 0;
     return {
       id: r.id,
       name: r.name,
@@ -77,7 +95,7 @@ export function diffBaseline(baseline: BaselineData, report: AuditReport): Basel
 
   // Include checks that existed in the baseline but were removed from the current run
   for (const [id, score] of Object.entries(baseline.checks)) {
-    if (!checks.some((c) => c.id === id)) {
+    if (!consumedIds.has(id) && !checks.some((c) => c.id === id)) {
       checks.push({
         id,
         name: id, // no human-readable name available for removed checks
@@ -104,6 +122,12 @@ export function diffBaseline(baseline: BaselineData, report: AuditReport): Basel
 }
 
 /* ── Internal helpers ─────────────────────────────────────── */
+
+/** Current id plus every former id a check answers to, for baseline lookup. */
+function idsForCheck(id: string): string[] {
+  const meta = allChecks.find((c) => c.meta.id === id)?.meta;
+  return meta === undefined ? [id] : allIdsFor(meta);
+}
 
 function isBaselineData(value: unknown): value is BaselineData {
   if (typeof value !== 'object' || value === null) return false;

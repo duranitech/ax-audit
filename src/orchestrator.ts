@@ -1,6 +1,7 @@
 import { createFetcher } from './fetcher.js';
 import { checks as allChecks } from './checks/index.js';
 import { calculateOverallScore, getGrade } from './scorer.js';
+import { isSelected } from './check-ids.js';
 import type { AuditOptions, AuditReport, BatchAuditReport, BatchOptions, CheckContext, CheckResult } from './types.js';
 
 export async function audit(options: AuditOptions): Promise<AuditReport> {
@@ -18,7 +19,9 @@ export async function audit(options: AuditOptions): Promise<AuditReport> {
     headers: homepage.headers,
   };
 
-  const checksToRun = options.checks ? allChecks.filter((c) => options.checks!.includes(c.meta.id)) : allChecks;
+  // Selection matches a check's current id or any former one, so a `--checks`
+  // flag written before a rename keeps working.
+  const checksToRun = options.checks ? allChecks.filter((c) => isSelected(c.meta, options.checks!)) : allChecks;
 
   log(`running ${checksToRun.length} check(s): ${checksToRun.map((c) => c.meta.id).join(', ')}`);
 

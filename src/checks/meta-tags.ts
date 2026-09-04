@@ -83,14 +83,16 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
     score -= 12;
   }
 
-  const hasAgentAlternate = alternateTags.some((tag) => /href\s*=\s*["'][^"']*agent\.json/i.test(tag));
+  // Either card path counts: A2A moved to agent-card.json in v0.3.0, and a site
+  // still on the pre-0.3 path is flagged by the agent-card check, not here.
+  const hasAgentAlternate = alternateTags.some((tag) => /href\s*=\s*["'][^"']*agent(-card)?\.json/i.test(tag));
   if (hasAgentAlternate) {
-    findings.push({ status: 'pass', message: 'rel="alternate" link to agent.json present' });
+    findings.push({ status: 'pass', message: 'rel="alternate" link to the Agent Card present' });
   } else {
     findings.push({
       status: 'warn',
-      message: 'No rel="alternate" link to agent.json in HTML',
-      hint: 'Add to your <head>: <link rel="alternate" type="application/json" href="/.well-known/agent.json" title="Agent Card">',
+      message: 'No rel="alternate" link to the Agent Card in HTML',
+      hint: 'Add to your <head>: <link rel="alternate" type="application/json" href="/.well-known/agent-card.json" title="Agent Card">',
       learnMoreUrl: guideUrl(meta.id, 'no-agent-alternate'),
     });
     score -= 8;

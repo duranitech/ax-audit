@@ -122,21 +122,23 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
   const linkHeader = headers['link'] ?? '';
   const links = parseLinkHeader(linkHeader);
   const hasLlmsLink = links.some((l) => /llms\.txt/i.test(l.url));
-  const hasAgentLink = links.some((l) => /agent\.json/i.test(l.url));
+  // A2A moved the card to agent-card.json in v0.3.0; both paths count as a
+  // discovery link so a site that upgraded is not marked down for it.
+  const hasAgentLink = links.some((l) => /agent(-card)?\.json/i.test(l.url));
 
   if (hasLlmsLink && hasAgentLink) {
-    findings.push({ status: 'pass', message: 'Link header references both llms.txt and agent.json' });
+    findings.push({ status: 'pass', message: 'Link header references both llms.txt and the Agent Card' });
   } else if (hasLlmsLink) {
     findings.push({ status: 'pass', message: 'Link header references llms.txt' });
     findings.push({
       status: 'warn',
-      message: 'Link header does not reference agent.json',
-      hint: 'Add agent.json to your Link header: Link: </.well-known/agent.json>; rel="alternate"; type="application/json"',
+      message: 'Link header does not reference the Agent Card',
+      hint: 'Add the Agent Card to your Link header: Link: </.well-known/agent-card.json>; rel="alternate"; type="application/json"',
       learnMoreUrl: guideUrl(meta.id, 'missing-agent-link'),
     });
     score -= 5;
   } else if (hasAgentLink) {
-    findings.push({ status: 'pass', message: 'Link header references agent.json' });
+    findings.push({ status: 'pass', message: 'Link header references the Agent Card' });
     findings.push({
       status: 'warn',
       message: 'Link header does not reference llms.txt',
@@ -148,21 +150,24 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
     findings.push({
       status: 'warn',
       message: 'Link header present but does not reference AI discovery files',
-      hint: 'Add AI discovery entries to your Link header: Link: </llms.txt>; rel="alternate"; type="text/plain", </.well-known/agent.json>; rel="alternate"; type="application/json"',
+      hint: 'Add AI discovery entries to your Link header: Link: </llms.txt>; rel="alternate"; type="text/plain", </.well-known/agent-card.json>; rel="alternate"; type="application/json"',
       learnMoreUrl: guideUrl(meta.id, 'no-ai-discovery'),
     });
     score -= 15;
   } else {
     findings.push({
       status: 'warn',
-      message: 'No Link header for AI discovery (llms.txt, agent.json)',
-      hint: 'Add a Link response header pointing to your AI discovery files: Link: </llms.txt>; rel="alternate"; type="text/plain", </.well-known/agent.json>; rel="alternate"; type="application/json"',
+      message: 'No Link header for AI discovery (llms.txt, Agent Card)',
+      hint: 'Add a Link response header pointing to your AI discovery files: Link: </llms.txt>; rel="alternate"; type="text/plain", </.well-known/agent-card.json>; rel="alternate"; type="application/json"',
       learnMoreUrl: guideUrl(meta.id, 'no-link-header'),
     });
     score -= 15;
   }
 
-  const wellKnownRes = await ctx.fetch(`${ctx.url}/.well-known/agent.json`);
+  // Probe the registered path first, falling back to the pre-0.3 one, so CORS
+  // is evaluated against whichever card the site actually serves.
+  let wellKnownRes = await ctx.fetch(`${ctx.url}/.well-known/agent-card.json`);
+  if (!wellKnownRes.ok) wellKnownRes = await ctx.fetch(`${ctx.url}/.well-known/agent.json`);
   if (wellKnownRes.ok) {
     const cors = wellKnownRes.headers['access-control-allow-origin'];
     if (cors) {

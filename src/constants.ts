@@ -587,7 +587,7 @@ export const CHECK_WEIGHTS: Record<string, number> = {
   'html-rendering': 9,
   'structured-data': 9,
   'http-headers': 9,
-  'agent-json': 7,
+  'agent-card': 7,
   mcp: 7,
   'seo-basics': 7,
   'security-txt': 6,
@@ -688,6 +688,45 @@ export const RSL_PAYMENT_TYPES: string[] = [
   'free',
 ];
 
+/**
+ * A2A Agent Card (https://a2a-protocol.org).
+ *
+ * Two generations are in the wild. A2A 1.0 (2026-03-12) replaced the top-level
+ * `url`, `protocolVersion`, `preferredTransport` and `additionalInterfaces`
+ * fields with one `supportedInterfaces[]` array; 0.3-shaped cards are still the
+ * majority deployed. Required-field lists are taken from `specification/a2a.proto`
+ * (1.0) and `specification/json/a2a.json` at tag v0.3.0.
+ */
+export const AGENT_CARD_REQUIRED_V1: string[] = [
+  'name',
+  'description',
+  'version',
+  'capabilities',
+  'supportedInterfaces',
+  'defaultInputModes',
+  'defaultOutputModes',
+  'skills',
+];
+
+export const AGENT_CARD_REQUIRED_V03: string[] = [
+  'name',
+  'description',
+  'url',
+  'version',
+  'protocolVersion',
+  'capabilities',
+  'defaultInputModes',
+  'defaultOutputModes',
+  'skills',
+];
+
+/** Transport bindings a 1.0 interface may declare. */
+export const A2A_PROTOCOL_BINDINGS: string[] = ['JSONRPC', 'GRPC', 'HTTP+JSON'];
+
+/** Media type registered for A2A payloads (spec §14.1.1). */
+export const A2A_MEDIA_TYPE = 'application/a2a+json';
+
+/** @deprecated Superseded by AGENT_CARD_REQUIRED_V03 / _V1 in 3.7. Kept for one minor. */
 export const AGENT_JSON_REQUIRED_FIELDS: string[] = ['name', 'description', 'url', 'skills'];
 
 export const SECURITY_TXT_REQUIRED_FIELDS: string[] = ['Contact', 'Expires'];

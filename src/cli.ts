@@ -3,6 +3,7 @@ import { audit, batchAudit } from './orchestrator.js';
 import { report, reportBatch } from './reporter/index.js';
 import { VERSION } from './constants.js';
 import { checks as allChecks } from './checks/index.js';
+import { allSelectableIds } from './check-ids.js';
 import { saveBaseline, loadBaseline, diffBaseline } from './baseline.js';
 import type { AuditReport, BaselineDiff, OutputFormat } from './types.js';
 
@@ -67,11 +68,12 @@ export function cli(argv: string[]): void {
       const checks = options.checks ? options.checks.split(',').map((s) => s.trim()) : undefined;
 
       if (checks) {
-        const validIds = allChecks.map((c) => c.meta.id);
-        const invalid = checks.filter((id) => !validIds.includes(id));
+        // Former ids stay valid so CI invocations survive a rename.
+        const selectable = allSelectableIds().map((id) => id.toLowerCase());
+        const invalid = checks.filter((id) => !selectable.includes(id.toLowerCase()));
         if (invalid.length > 0) {
           console.error(`Error: Unknown check(s): ${invalid.join(', ')}`);
-          console.error(`Available checks: ${validIds.join(', ')}`);
+          console.error(`Available checks: ${allChecks.map((c) => c.meta.id).join(', ')}`);
           process.exit(1);
         }
       }

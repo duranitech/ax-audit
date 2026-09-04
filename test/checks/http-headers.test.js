@@ -85,7 +85,7 @@ describe('http-headers', () => {
     );
     const result = await check(ctx);
     assert.ok(result.findings.some(f => f.status === 'pass' && f.message.includes('llms.txt')));
-    assert.ok(result.findings.some(f => f.status === 'warn' && f.message.includes('agent.json')));
+    assert.ok(result.findings.some(f => f.status === 'warn' && f.message.includes('Agent Card')));
   });
 
   it('should penalize missing CORS on .well-known', async () => {
@@ -205,5 +205,45 @@ describe('parseLinkHeader', () => {
     const links = parseLinkHeader(header);
     assert.equal(links.length, 1);
     assert.equal(links[0].url, 'https://example.com/good');
+  });
+});
+
+describe('http-headers: Agent Card path migration', () => {
+  it('should accept a Link header pointing at the registered agent-card.json path', async () => {
+    const ctx = mockContext(
+      {},
+      {
+        headers: {
+          link: '</llms.txt>; rel="alternate"; type="text/plain", </.well-known/agent-card.json>; rel="alternate"; type="application/json"',
+        },
+      },
+    );
+    const result = await check(ctx);
+    assert.ok(
+      result.findings.some((f) => f.status === 'pass' && f.message.includes('both llms.txt and the Agent Card')),
+      'a site on the current A2A path must not be marked down for it',
+    );
+  });
+
+  it('should still accept the pre-0.3 agent.json path', async () => {
+    const ctx = mockContext(
+      {},
+      {
+        headers: {
+          link: '</llms.txt>; rel="alternate", </.well-known/agent.json>; rel="alternate"',
+        },
+      },
+    );
+    const result = await check(ctx);
+    assert.ok(result.findings.some((f) => f.status === 'pass' && f.message.includes('both llms.txt and the Agent Card')));
+  });
+
+  it('should evaluate CORS against the registered card path when it exists', async () => {
+    const ctx = mockContext(
+      { '/.well-known/agent-card.json': mockResponse({ headers: { 'access-control-allow-origin': '*' } }) },
+      { headers: { 'strict-transport-security': 'max-age=31536000' } },
+    );
+    const result = await check(ctx);
+    assert.ok(result.findings.some((f) => f.status === 'pass' && f.message.includes('CORS enabled')));
   });
 });

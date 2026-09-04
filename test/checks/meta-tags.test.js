@@ -83,7 +83,7 @@ describe('meta-tags', () => {
     const html = `<html><head>${FULL_OG}</head></html>`;
     const ctx = mockContext({}, { html });
     const result = await check(ctx);
-    assert.ok(result.findings.some((f) => f.status === 'warn' && f.message.includes('agent.json')));
+    assert.ok(result.findings.some((f) => f.status === 'warn' && f.message.includes('Agent Card')));
   });
 
   it('should penalize missing rel="me" links', async () => {
