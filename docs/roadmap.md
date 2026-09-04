@@ -1,4 +1,6 @@
-# Roadmap: 3.7 → 4.0 (research snapshot 2026-09-04)
+# Roadmap: 3.7 → 4.0 — **completed 2026-09-04**
+
+*Research snapshot and implementation plan. All four releases shipped; this document is kept as the record of what was verified and why each decision was made.*
 
 ax-audit has not shipped since 3.6.0 (2026-06-09). This document records what changed in the agent-web ecosystem since then, which existing checks are now wrong or stale, which new checks are worth adding, and a phased implementation plan that respects the 3.x scoring policy (no downward score changes until 4.0).
 
@@ -273,15 +275,15 @@ Deferred (needs a headless browser or an LLM, out of scope for this package): re
 
 Delivered in eleven commits. Two things were found by dogfooding rather than by planning: `agent-access` was probing sites with a user agent containing `Google-Extended`, a robots.txt control token no request ever carries; and a speculative probe against a single-page application returned the index shell, which the check reported as a malformed document. Both are fixed and regression-tested.
 
-### 3.8.0 — "New signals" (all weight 0)
+### 3.8.0 — "New signals" (all weight 0) — **shipped**
 
 `ai-directives`, `usage-policy`, `http-hygiene`, `ai-catalog`, `agent-skills`, `webmcp`, `commerce-discovery`, `auth-discovery` (with `applicable` flag displayed as N/A). `structured-fields.ts`, `frontmatter.ts`, `tokens.ts`. Reporters render categories and N/A. ~90 tests.
 
-### 3.9.0 — "Readability depth"
+### 3.9.0 — "Readability depth" — **shipped**
 
 `agent-operability`; llms.txt v2 extensions and link sampling; content-negotiation extensions; structured-data freshness/author; crawl-efficiency tokens/TTFB; `--probe-mcp` flag. ~50 tests.
 
-### 4.0.0 — "Rescore"
+### 4.0.0 — "Rescore" — **shipped**
 
 - Weights redistributed (proposal below), `applicable: false` excluded from denominators, categories in every reporter, baseline files carry `schemaVersion: 2` with a migration path for 3.x baselines (missing checks are ignored, not regressions).
 - Retire `well-known-ai`; ids `agent-json`, `mcp`, `openapi` removed (aliases dropped); `CORE_AI_CRAWLERS` = 12 tokens.
@@ -300,6 +302,27 @@ Proposed 4.0 weights (sum 100):
 | Informational | 0 | ai-catalog · webmcp · commerce-discovery · auth-discovery |
 
 ---
+
+## 5a. What actually shipped
+
+| Release | Commits | Tests | Headline |
+| --- | --- | --- | --- |
+| 3.7.0 | 11 | 553 | Corrected three checks probing paths that were never the standard, and a crawler catalogue containing tokens that do not exist |
+| 3.8.0 | 8 | 755 | Eight new checks, N/A reporting, category grouping |
+| 3.9.0 | 4 | 828 | agent-operability, llms.txt v2, provenance and freshness, cost in tokens |
+| 4.0.0 | 5 | 865 | Rescore, conditional protocol checks, profiles, per-area gates, versioned baselines |
+
+Four things were found by running the tool rather than by planning it, and none would have surfaced any other way:
+
+1. `agent-access` probed sites with a user agent containing `Google-Extended` — a robots.txt control token no request ever carries, so the probe tested nothing.
+2. A speculative probe against a single-page application returned the index shell, and the check reported a malformed document on a site that had none.
+3. `commerce-discovery` told a SaaS site to build a commerce integration because it prices its plans with an `Offer`.
+4. The first draft of the 4.0 rescore produced a distribution nobody asked for, because per-check `meta.weight` values silently won over the central map.
+
+Two items from the plan were **not** built, deliberately:
+
+- **`--probe-mcp`** live handshake. A POST to a stranger's MCP endpoint is a side effect an audit should not have by default, and behind a flag it would be exercised too rarely to stay correct.
+- **Dropping the renamed check ids.** The plan called for removing `agent-json`, `mcp` and `openapi` at 4.0. They cost one line each and live in CI configs, so they stay as permanent aliases.
 
 ## 6. Cross-repo follow-ups
 

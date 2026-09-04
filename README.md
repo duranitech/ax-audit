@@ -42,24 +42,20 @@ AI agents and LLMs are increasingly crawling, indexing, and interacting with web
 
 ## What it checks
 
-27 checks across five areas — 14 weighted, 13 informational. Full reference: **[docs/checks.md](docs/checks.md)**.
+26 checks across five areas. Full reference: **[docs/checks.md](docs/checks.md)**.
 
-| Check | Weight | Check | Weight |
-|---|---|---|---|
-| LLMs.txt | 11% | Security.txt | 6% |
-| Robots.txt + [Content Signals](https://contentsignals.org) + [AIPREF](https://datatracker.ietf.org/wg/aipref/documents/) | 11% | Meta Tags (OG / Twitter / AI) | 6% |
-| HTML Rendering | 9% | API Discovery ([RFC 9727](https://www.rfc-editor.org/rfc/rfc9727.html) / OpenAPI) | 6% |
-| Structured Data (JSON-LD) | 9% | TLS / HTTPS | 5% |
-| HTTP Headers + discovery relations | 9% | Sitemap | 4% |
-| Agent Card ([A2A](https://a2a-protocol.org)) | 7% | AI Well-Known | 3% |
-| MCP Discovery (server cards) | 7% | Content Negotiation (Markdown for Agents) | 0%* |
-| SEO Basics | 7% | [RSL License](https://rslstandard.org) · Agent Access (blocking / cloaking) · Crawl Efficiency | 0%* |
+| Area | Weight | Checks |
+|---|---|---|
+| **Content** — is there substance an agent can read? | 33% | HTML Rendering · Agent Operability · Structured Data · SEO Basics · Content Negotiation |
+| **Access** — can an agent actually retrieve it? | 24% | Agent Access · AI Directives · HTTP Hygiene · TLS/HTTPS · Crawl Efficiency |
+| **Discovery** — can an agent find your machine-readable files? | 21% | Robots.txt · LLMs.txt · HTTP Headers · Sitemap · Meta Tags |
+| **Protocols** — what can an agent call? | 13% | API Discovery · Agent Card · MCP Discovery · Agent Skills · Auth Discovery |
+| **Policy** — what usage rights do you declare? | 9% | Usage Policy · Security.txt · RSL License |
+| Draft specifications, reported but never scored | 0% | AI Catalog · WebMCP · Commerce Discovery |
 
-\* Informational in 3.x: reported in full, no effect on the score. Weighted in v4.0.
+Content leads because the failure that breaks the most agents is a page with nothing in its HTML. Most crawlers do not run JavaScript, so a site whose content appears only after hydration is invisible to them no matter how many discovery files it publishes.
 
-**Also checked, informational in 3.x** — Agent Operability (whether a browser agent can name and press what is on the page) · AI Directives (the `nosnippet` / `noarchive` controls Google and Microsoft honor for AI answers) · Usage Policy (whether your Content Signals, AIPREF, RSL and TDMRep declarations agree with each other) · HTTP Hygiene (soft 404s, redirect depth, `Retry-After`, charset) · AI Catalog · Agent Skills · WebMCP · Commerce Discovery ([UCP](https://developers.google.com/merchant/ucp/guides/ucp-profile)) · Auth Discovery ([RFC 9728](https://www.rfc-editor.org/rfc/rfc9728.html)).
-
-Checks that do not apply to a site — a commerce profile on a blog, OAuth metadata where nothing needs authorizing — report **n/a** and are excluded from the score rather than counted as failures.
+Protocol checks are **conditional**: a blog has no API to describe, so those report `n/a` and are excluded from the score rather than counted as failures. Use `--profile` to audit against what a site intends to build.
 
 Every finding links to a step-by-step **[remediation guide](https://lucioduran.com/projects/ax-audit/guides)**.
 
@@ -71,6 +67,9 @@ ax-audit https://a.com https://b.com --concurrency 2  # batch, in parallel
 ax-audit https://example.com --output markdown        # also: json, html
 ax-audit https://example.com --checks llms-txt,rsl    # subset of checks
 ax-audit https://example.com --only-failures          # hide passing findings
+ax-audit https://example.com --category access                 # one area only
+ax-audit https://example.com --profile api                     # audit as though it had an API
+ax-audit https://example.com --fail-on-category access:70      # per-area CI gate
 ax-audit https://example.com --baseline .ax-baseline.json --fail-on-regression 5
 ```
 

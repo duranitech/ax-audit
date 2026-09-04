@@ -1,10 +1,25 @@
 # Checks Reference
 
-ax-audit runs 27 checks. Fourteen are **weighted** (summing to 100% of the overall score); thirteen are **informational** in 3.x — they run and report findings but carry weight 0 until v4.0, because score-affecting changes are treated as breaking (see [CHANGELOG 3.0.0](../CHANGELOG.md)).
+ax-audit runs 26 checks. Twenty-three are **weighted**, summing to 100. Three rest on draft specifications and stay at weight 0: scoring a site against a specification that may be renamed next quarter would make the number less trustworthy, not more.
 
 Checks are grouped into five areas, and reports are ordered by them: **content** (is there substance an agent can read?), **discovery** (can an agent find your machine-readable files?), **access** (can it actually retrieve them?), **policy** (what usage rights do you declare?), and **protocols** (what can an agent call?).
 
-Some checks are **conditional**. A blog has no commerce profile to publish and nothing to authorize, so those checks report **n/a** and are excluded from the score rather than counted as failures. Everything counted against a site is something the site could have done.
+Some checks are **conditional**. A blog has no API to describe, no MCP server to advertise and nothing to authorize, so those checks report **n/a** and are excluded from the score rather than counted as failures. Everything counted against a site is something the site could have done. `--profile api|mcp|agent|docs|commerce|all` forces them applicable, for auditing against what a site intends to become.
+
+## Weights
+
+| Area | Total | Checks |
+| --- | --- | --- |
+| Content | 33 | html-rendering 11 · agent-operability 7 · structured-data 6 · seo-basics 5 · content-negotiation 4 |
+| Access | 24 | agent-access 9 · ai-directives 6 · http-hygiene 4 · tls-https 3 · crawl-efficiency 2 |
+| Discovery | 21 | robots-txt 9 · llms-txt 5 · http-headers 4 · sitemap 2 · meta-tags 1 |
+| Protocols | 13 | api-discovery 4 · agent-card 3 · mcp-discovery 3 · agent-skills 2 · auth-discovery 1 |
+| Policy | 9 | usage-policy 4 · security-txt 3 · rsl 2 |
+| Draft specifications | 0 | ai-catalog · webmcp · commerce-discovery |
+
+Content leads because the failure that breaks the most agents is a page with nothing in its HTML: most crawlers do not run JavaScript, and a site whose content appears only after hydration is invisible no matter how many discovery files it publishes. Access is second because a firewall rule or a `nosnippet` directive silently undoes everything else, and those are the failures operators are least likely to know about. llms.txt sits at 5 rather than the 11 it carried in 3.x, because most published files are never fetched by an AI search crawler.
+
+Weights live in `CHECK_WEIGHTS` in `src/constants.ts`, and only there. Checks used to declare their own alongside it, and the two drifted.
 
 Every probed path is labelled by standing — **IANA-registered**, **vendor convention**, **draft**, or **legacy** — because the agent web mixes registered URIs with drafts that get renamed. A missing draft file is not the same kind of finding as a missing registered one, and reports say which is which.
 

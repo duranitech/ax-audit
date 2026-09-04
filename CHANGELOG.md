@@ -2,6 +2,36 @@
 
 All notable changes to ax-audit are documented here.
 
+## [4.0.0] - 2026-09-04
+
+**Scores change on every site.** This release redistributes the weights, makes protocol checks conditional, and retires a check whose premise did not survive verification. Baselines written by earlier versions are read normally, but regression gating is suspended across the change — a rescore is not something the site did.
+
+### Breaking
+
+- **Weights redistributed by what actually stops an agent.** Content leads at 33, because the failure that breaks the most agents is a page with nothing in its HTML: most crawlers do not run JavaScript, so content that appears only after hydration is invisible no matter how many discovery files a site publishes. `html-rendering` is the highest-weighted check at 11. Access is second at 24, because a firewall rule or a `nosnippet` directive silently undoes everything else. Discovery drops to 21, with llms.txt demoted from 11 to 5 on the evidence that most published files are never fetched by an AI search crawler.
+- **Protocol checks are conditional.** A blog has no API to describe and is not an agent; scoring it zero said something false and made the overall number unreadable. Each protocol check now detects whether the site has the corresponding surface, reports **n/a** when it does not, and leaves the denominator. When the surface *is* present, a missing description is a stronger finding than before, and the wording says so: not "no MCP server discovery found" but "MCP server present but not discoverable".
+- **`well-known-ai` retired.** Three of its five scored files had no consumer: `nlweb.json` appears in no NLWeb release, `genai.txt` has no specification, and `ai-plugin.json` described a product shut down in 2024. Its useful probes moved into the checks that own them in 3.8.
+- **The 3.x scoring freezes are gone.** `robots-txt` scores against all twelve current core crawlers rather than the frozen eight, so the configuration that scored 100 in 3.6 now scores 90. Blocking a crawler deducts by purpose: 5 for a search crawler, whose absence removes the site from that assistant's answers, and 2 for a training crawler, where blocking is a defensible policy choice.
+- **`CheckMeta.weight` is now optional** and nothing uses it. Weights live in `CHECK_WEIGHTS` alone. Having them in two places is what let them drift.
+
+### Added
+
+- **`--profile api|mcp|agent|docs|commerce|all`** forces conditional checks applicable, for auditing against what a site intends to build rather than what it already has.
+- **`--category content|discovery|access|policy|protocols`** runs one area. It narrows an explicit `--checks` selection rather than replacing it.
+- **`--fail-on-category access:70,content:80`** gates CI per area. An overall score hides an area that is entirely broken: a site can score 80 while every access check fails because the other four carry it. Areas with nothing applicable are reported as not evaluated rather than failed.
+- **Versioned baselines.** `schemaVersion` records which scoring model produced a baseline; a mismatch shows the deltas but suspends gating and says how to resume it. Baselines also record which checks were N/A, so gaining or losing a surface is not read as a regression or an improvement.
+
+### Migration
+
+1. Expect a different score. Sites with no API or MCP surface generally rise, because they are no longer marked down for lacking things they do not have. A bare page rose from 20 to 50 in testing; a documentation site with real infrastructure rose from 64 to 77.
+2. Re-save your baseline: `ax-audit <url> --save-baseline .ax-baseline.json`. Until you do, `--fail-on-regression` reports but does not gate.
+3. `--checks agent-json`, `--checks mcp` and `--checks openapi` still work; the ids were renamed in 3.7 and the old names remain aliases.
+4. If you relied on `well-known-ai`, its live probes are now in `usage-policy` (TDMRep) and the checks that own each file.
+
+### Tests
+
+865 total. New coverage for surface detection, the weight distribution (sums to 100, no check declares its own, content outweighs every area), the CLI end to end via a subprocess, and baseline versioning in both directions.
+
 ## [3.9.0] - 2026-09-04
 
 Depth rather than breadth. One new check, and the existing readability checks extended to cover what agents actually do with a page once they reach it. Everything added is informational; scores are unchanged.

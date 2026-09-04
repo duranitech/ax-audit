@@ -65,3 +65,39 @@ npx ax-audit $(cat urls.txt) --concurrency 4 --json > batch.json
 # Show me only what is broken
 npx ax-audit https://your-site.com --only-failures
 ```
+
+## Agent-surface profiles
+
+Protocol checks (`api-discovery`, `agent-card`, `mcp-discovery`, `agent-skills`, `auth-discovery`, `commerce-discovery`) apply only where the site has the corresponding surface. A blog has no API to describe, so scoring it zero would say something false; those checks report **n/a** and leave the denominator.
+
+`--profile` overrides that, for auditing against what a site intends to build rather than what it already has.
+
+```bash
+ax-audit https://example.com --profile api        # audit as though it offered an API
+ax-audit https://example.com --profile all        # every protocol check applies
+```
+
+Values: `auto` (default, detect from the site), `api`, `mcp`, `agent`, `docs`, `commerce`, `all`.
+
+## Focusing on one area
+
+```bash
+ax-audit https://example.com --category access              # only access checks
+ax-audit https://example.com --category content,discovery   # two areas
+```
+
+`--category` narrows an explicit `--checks` selection rather than replacing it, and errors if the intersection is empty.
+
+## Per-area CI gates
+
+An overall score hides an area that is entirely broken: a site can score 80 while every access check fails, because the other four carry it.
+
+```bash
+ax-audit https://example.com --fail-on-category access:70,content:80
+```
+
+Each area is reported against its threshold on stderr, so the output survives `--output json` being piped elsewhere. An area with no applicable checks is reported as not evaluated rather than failed: a build must not break because a site has no commerce surface.
+
+## Baselines across a scoring change
+
+Baselines record which scoring model produced them. Comparing a baseline written by an older version shows the deltas but suspends regression gating, because a rescore is not something the site did. Re-save with `--save-baseline` to resume gating. Checks that changed applicability are excluded from regressions and improvements for the same reason.
