@@ -1,7 +1,7 @@
 import { API_DESCRIPTION_PATHS, LINKSET_MEDIA_TYPE } from '../constants.js';
 import { guideUrl } from '../guide-urls.js';
 import type { CheckContext, CheckResult, CheckMeta, Finding, FetchResponse } from '../types.js';
-import { buildResult, checkContentType } from './utils.js';
+import { buildResult, checkContentType, isHtmlDocument } from './utils.js';
 import { findLinkTags, getAttribute } from './html-utils.js';
 import { parseLinkHeader } from './http-headers.js';
 import { standingNote } from './well-known.js';
@@ -121,18 +121,12 @@ export function serviceDescsFromLinkset(body: string): string[] {
 }
 
 /**
- * Guard against a conventional path returning a web page rather than a
- * description. A 200 from `/api-docs` is usually a Swagger UI page, and on an
- * SPA every unknown path returns the index shell — accepting either would turn
- * "no API description" into a confusing validation failure.
- *
- * Anything that is not HTML is handed to validation, which reports its own
- * problems precisely. This guard only rejects documents that are definitely a
- * page.
+ * A 200 from `/api-docs` is usually a Swagger UI page, and on an SPA every
+ * unknown path returns the index shell. Either would turn "no API description"
+ * into a confusing validation failure, so pages are treated as absent.
  */
 function looksLikeApiDescription(body: string): boolean {
-  const head = body.slice(0, 4096).trimStart();
-  return !/^(<!doctype html|<html[\s>])/i.test(head) && !/<html[\s>]/i.test(head.slice(0, 512));
+  return !isHtmlDocument(body);
 }
 
 export default async function check(ctx: CheckContext): Promise<CheckResult> {

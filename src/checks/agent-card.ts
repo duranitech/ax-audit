@@ -6,7 +6,7 @@ import {
 } from '../constants.js';
 import { guideUrl } from '../guide-urls.js';
 import type { CheckContext, CheckResult, CheckMeta, Finding, FetchResponse } from '../types.js';
-import { buildResult, checkContentType } from './utils.js';
+import { buildResult, checkContentType, isHtmlDocument } from './utils.js';
 import { WELL_KNOWN, standingNote } from './well-known.js';
 
 /**
@@ -64,11 +64,16 @@ interface Located {
   path: string;
 }
 
-/** Try the registered path first, then the pre-0.3 one. */
+/**
+ * Try the registered path first, then the pre-0.3 one. An HTML response counts
+ * as absent: an SPA catch-all returns its index shell for every unknown path,
+ * and reporting that as a malformed card would send an operator looking for a
+ * bug in a file they never wrote.
+ */
 async function locateCard(ctx: CheckContext): Promise<Located | null> {
   for (const path of [CANONICAL_PATH, LEGACY_PATH]) {
     const res = await ctx.fetch(`${ctx.url}${path}`);
-    if (res.ok && res.body.trim().length > 0) return { res, path };
+    if (res.ok && res.body.trim().length > 0 && !isHtmlDocument(res.body)) return { res, path };
   }
   return null;
 }

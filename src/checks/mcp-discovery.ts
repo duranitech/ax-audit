@@ -8,7 +8,7 @@ import {
 } from '../constants.js';
 import { guideUrl } from '../guide-urls.js';
 import type { CheckContext, CheckResult, CheckMeta, Finding, FetchResponse } from '../types.js';
-import { buildResult, checkContentType } from './utils.js';
+import { buildResult, checkContentType, isHtmlDocument } from './utils.js';
 import { standingNote } from './well-known.js';
 
 /**
@@ -71,9 +71,15 @@ const MECHANISM_LABEL: Record<Mechanism, string> = {
 /** Endpoint paths worth trying a server card against, in order of convention strength. */
 const ENDPOINT_CANDIDATES = ['/mcp', '/api/mcp', '/sse'];
 
+/**
+ * Fetch a probe path, treating an HTML response as "not present". An SPA
+ * catch-all answers every unknown path with its index shell, and accepting one
+ * would report a malformed server card on a site that has no MCP server at all.
+ */
 async function fetchIfPresent(ctx: CheckContext, path: string): Promise<FetchResponse | null> {
   const res = await ctx.fetch(`${ctx.url}${path}`);
-  return res.ok && res.body.trim().length > 0 ? res : null;
+  if (!res.ok || res.body.trim().length === 0) return null;
+  return isHtmlDocument(res.body) ? null : res;
 }
 
 /**

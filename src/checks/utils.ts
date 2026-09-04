@@ -17,6 +17,26 @@ export function buildResult(meta: CheckMeta, score: number, findings: Finding[],
 }
 
 /**
+ * Whether a response body is a web page rather than the machine-readable
+ * document that was asked for.
+ *
+ * Single-page applications answer every unmatched path with their index shell,
+ * status 200. Probing `/.well-known/agent-card.json` or `/mcp/server-card` on
+ * such a site returns HTML, and a check that trusts the status code reports a
+ * *malformed* document where the honest answer is that the document is absent.
+ * That mistake is worse than a miss: it sends an operator hunting for a bug in
+ * a file they never wrote.
+ *
+ * Detection is deliberately narrow — a doctype or an `<html>` tag near the top
+ * of the body. Anything else is handed to the real parser, which reports its own
+ * problems precisely.
+ */
+export function isHtmlDocument(body: string): boolean {
+  const head = body.slice(0, 1024).trimStart();
+  return /^<!doctype\s+html/i.test(head) || /^<html[\s>]/i.test(head) || /<html[\s>]/i.test(head.slice(0, 512));
+}
+
+/**
  * Validate the `Content-Type` of a fetched resource against a list of acceptable MIME types.
  *
  * Returns:
