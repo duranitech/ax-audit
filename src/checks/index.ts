@@ -18,6 +18,7 @@ import contentNegotiation, { meta as contentNegotiationMeta } from './content-ne
 import rsl, { meta as rslMeta } from './rsl.js';
 import agentAccess, { meta as agentAccessMeta } from './agent-access.js';
 import crawlEfficiency, { meta as crawlEfficiencyMeta } from './crawl-efficiency.js';
+import aiDirectives, { meta as aiDirectivesMeta } from './ai-directives.js';
 
 export const checks: CheckModule[] = [
   { run: llmsTxt, meta: llmsTxtMeta },
@@ -38,4 +39,5 @@ export const checks: CheckModule[] = [
   { run: rsl, meta: rslMeta },
   { run: agentAccess, meta: agentAccessMeta },
   { run: crawlEfficiency, meta: crawlEfficiencyMeta },
+  { run: aiDirectives, meta: aiDirectivesMeta },
 ];

@@ -602,6 +602,7 @@ export const CHECK_WEIGHTS: Record<string, number> = {
   rsl: 0,
   'agent-access': 0,
   'crawl-efficiency': 0,
+  'ai-directives': 0,
 };
 
 /**
@@ -627,6 +628,7 @@ export const CHECK_CATEGORIES: Record<string, CheckCategory> = {
   'mcp-discovery': 'protocols',
   'api-discovery': 'protocols',
   'well-known-ai': 'protocols',
+  'ai-directives': 'access',
 };
 
 export const GRADES: Grade[] = [
