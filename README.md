@@ -4,9 +4,9 @@
 
 <h1 align="center">ax-audit</h1>
 
-[![CI](https://github.com/lucioduran/ax-audit/actions/workflows/ci.yml/badge.svg)](https://github.com/lucioduran/ax-audit/actions/workflows/ci.yml)
+[![CI](https://github.com/axrush/ax-audit/actions/workflows/ci.yml/badge.svg)](https://github.com/axrush/ax-audit/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/ax-audit.svg)](https://www.npmjs.com/package/ax-audit)
-[![license](https://img.shields.io/npm/l/ax-audit.svg)](https://github.com/lucioduran/ax-audit/blob/main/LICENSE)
+[![license](https://img.shields.io/npm/l/ax-audit.svg)](https://github.com/axrush/ax-audit/blob/main/LICENSE)
 [![node](https://img.shields.io/node/v/ax-audit.svg)](https://nodejs.org)
 
 **Lighthouse for AI Agents.** Audit any website's AI Agent Experience (AX) readiness in seconds.
@@ -72,7 +72,7 @@ Content leads because the failure that breaks the most agents is a page with not
 
 Protocol checks are **conditional**: a blog has no API to describe, so those report `n/a` and are excluded from the score rather than counted as failures. Use `--profile` to audit against what a site intends to build.
 
-Every finding links to a step-by-step **[remediation guide](https://lucioduran.com/projects/ax-audit/guides)**.
+Every finding links to a step-by-step **[remediation guide](https://axrush.com/guides)**.
 
 ## Usage
 
@@ -121,9 +121,9 @@ Reference:
 | [docs/ci.md](docs/ci.md) | GitHub Actions recipes: gates, PR comments, scheduled drift detection |
 | [docs/architecture.md](docs/architecture.md) | Pipeline design, check anatomy, how to add a check, scoring policy |
 | [docs/faq.md](docs/faq.md) | Troubleshooting, false positives, the `agent-access` verified-bots caveat |
-| [Remediation guides](https://lucioduran.com/projects/ax-audit/guides) | Step-by-step fixes for every finding |
+| [Remediation guides](https://axrush.com/guides) | Step-by-step fixes for every finding |
 
-The same documentation is browsable at [lucioduran.com/projects/ax-audit/docs](https://lucioduran.com/projects/ax-audit/docs), rendered from these files. Contributors: see [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
+The same documentation is browsable at [axrush.com/docs](https://axrush.com/docs), rendered from these files. Contributors: see [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 
 ## Scoring
 
@@ -148,8 +148,8 @@ Contributions are welcome — see **[docs/architecture.md](docs/architecture.md)
 
 ## Related
 
-- **[ax-init](https://github.com/lucioduran/ax-init)** — generate the AX files this tool audits
-- **[ax-cite](https://github.com/lucioduran/ax-cite)** — embed AI-extractable structured data in your pages
+- **[ax-init](https://github.com/axrush/ax-init)** — generate the AX files this tool audits
+- **[ax-cite](https://github.com/axrush/ax-cite)** — embed AI-extractable structured data in your pages
 
 ## License
 
@@ -157,4 +157,4 @@ Contributions are welcome — see **[docs/architecture.md](docs/architecture.md)
 
 ---
 
-Built by [Lucio Duran](https://lucioduran.com)
+Built by [AX Rush](https://axrush.com)

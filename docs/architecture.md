@@ -61,7 +61,7 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
 
 Conventions:
 
-- **Findings are actionable.** Every `warn`/`fail` carries a `hint` with concrete remediation and a `learnMoreUrl` pointing to `lucioduran.com/projects/ax-audit/guides/<check-id>#<anchor>`. Every anchor must have a section in that guide.
+- **Findings are actionable.** Every `warn`/`fail` carries a `hint` with concrete remediation and a `learnMoreUrl` pointing to `axrush.com/guides/<check-id>#<anchor>`. Every anchor must have a section in that guide.
 - **Scores are clamped** to [0, 100] by `buildResult`.
 - **Shared HTML primitives** live in `checks/html-utils.ts` (`getMetaContent`, `findLinkTags`, `getAttribute`, `extractVisibleText`, …) — no per-check regex duplication.
 - **robots.txt is parsed once**, by `checks/robots-parser.ts`. It returns User-agent groups with their rules plus `Content-Signal`, `Content-Usage`, `License`, `Sitemap` and `Agentmap` directives. `robots-txt`, `rsl` and `agent-access` all consume it, so the grouping rules have one definition.
@@ -99,6 +99,6 @@ Two check states exist beyond a score:
 
 ## Testing
 
-`npm test` builds (`tsc`) and runs `node --test`. The suite (894 tests) covers every check, the scorer, baseline logic, the Markdown reporter, plus integration tests that spin up real local HTTP servers for the fetcher (per-header caching, retries, HEAD and manual redirects) and the batch orchestrator (ordering, concurrency caps). No test dependencies beyond Node.
+`npm test` builds (`tsc`) and runs `node --test`. The suite (964 tests) covers every check, the scorer, baseline logic, the Markdown reporter, plus integration tests that spin up real local HTTP servers for the fetcher (per-header caching, retries, HEAD and manual redirects) and the batch orchestrator (ordering, concurrency caps). No test dependencies beyond Node.
 
 Two classes of test exist specifically to keep the 3.x promise that no score goes down: **score-stability tests** assert that a configuration which scored 100 in 3.6 still scores 100, and that findings added inside a weighted check leave the score untouched. When those fail, the change belongs in the next major, not the current minor.

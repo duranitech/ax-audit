@@ -5,7 +5,7 @@ Thanks for your interest in improving ax-audit. This guide covers the workflow, 
 ## Development setup
 
 ```bash
-git clone https://github.com/lucioduran/ax-audit.git
+git clone https://github.com/axrush/ax-audit.git
 cd ax-audit
 npm install
 npm test        # builds (tsc) then runs node:test
@@ -39,7 +39,7 @@ A check is one module exporting `default` (the async check function) and `meta`.
 3. **Add its weight** to `CHECK_WEIGHTS` in `src/constants.ts` (use `0` for 3.x).
 4. **Write tests** in `test/checks/your-check.test.js` using `mockContext` / `mockResponse` from `test/helpers.js`. Route values may be functions `(url, fetchOptions) => response` when the response must vary by request header.
 5. **Document it** in `docs/checks.md` (with exact scoring) and the README table.
-6. **Write the remediation guide** covering *every* `learnMoreUrl` anchor your findings emit. Guides live in the [lucioduran-site](https://lucioduran.com/projects/ax-audit/guides) repo; an undocumented anchor is an incomplete check.
+6. **Write the remediation guide** covering *every* `learnMoreUrl` anchor your findings emit. Guides are published at [axrush.com/guides](https://axrush.com/guides); an undocumented anchor is an incomplete check.
 7. **Update the CHANGELOG** under a new version heading.
 
 ## Scoring policy (important)

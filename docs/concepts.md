@@ -98,4 +98,4 @@ Checks resting on draft specifications — `ai-catalog`, `webmcp`, `commerce-dis
 
 - [getting-started.md](./getting-started.md) — run your first audit
 - [checks.md](./checks.md) — exact scoring per standard
-- The [remediation guides](https://lucioduran.com/projects/ax-audit/guides) — how to implement each one
+- The [remediation guides](https://axrush.com/guides) — how to implement each one

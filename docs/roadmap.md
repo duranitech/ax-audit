@@ -329,7 +329,7 @@ Two items from the plan were **not** built, deliberately:
 
 - **ax-init** generates `/.well-known/agent.json` and `/.well-known/mcp.json`: switch to `agent-card.json` (A2A 1.0 shape) and a server card at `/.well-known/mcp/server-card.json` plus `/.well-known/ai-catalog.json`; add `Content-Signal` with `use=`, `Link` headers (`describedby`, `api-catalog`), `.md` mirrors.
 - **ax-skill** (`ax.md`) documents the old paths and the `ai:*` meta namespace as recommendations; update to the 3.7 reality and add the robots-meta AI directive semantics.
-- **Remediation guides** at `lucioduran.com/projects/ax-audit/guides/<check-id>`: one page per new check id, plus new anchors listed in each check's source. This is the largest non-code deliverable; ship guides with each minor release.
+- **Remediation guides** at `axrush.com/guides/<check-id>`: one page per new check id, plus new anchors listed in each check's source. This is the largest non-code deliverable; ship guides with each minor release.
 
 ---
 

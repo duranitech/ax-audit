@@ -46,13 +46,13 @@ The check reads the `Content-Encoding` header on the response it received. If a 
 
 ### `content-negotiation` fails but I don't serve Markdown
 
-That's expected — most sites don't yet. It's informational (weight 0). Adopt it when you're ready; the [guide](https://lucioduran.com/projects/ax-audit/guides/content-negotiation) covers Cloudflare/Vercel zero-code options.
+That's expected — most sites don't yet. It's informational (weight 0). Adopt it when you're ready; the [guide](https://axrush.com/guides/content-negotiation) covers Cloudflare/Vercel zero-code options.
 
 ## Running the tool
 
 ### My WAF is blocking ax-audit itself
 
-ax-audit sends a `User-Agent` of `ax-audit/<version> (+https://github.com/lucioduran/ax-audit)`. If your firewall challenges unknown agents, allowlist that UA (or the IP you run from) for the duration of the audit. Note that several checks deliberately send *other* user-agents (`agent-access`) and unusual `Accept` headers (`content-negotiation`) — a WAF rejecting those is itself a finding, not a tool bug.
+ax-audit sends a `User-Agent` of `ax-audit/<version> (+https://github.com/axrush/ax-audit)`. If your firewall challenges unknown agents, allowlist that UA (or the IP you run from) for the duration of the audit. Note that several checks deliberately send *other* user-agents (`agent-access`) and unusual `Accept` headers (`content-negotiation`) — a WAF rejecting those is itself a finding, not a tool bug.
 
 ### How do I audit a staging site behind auth?
 
@@ -82,8 +82,8 @@ Yes — `import { audit } from 'ax-audit'` returns a typed `AuditReport`. See [a
 
 ### How do I generate the files ax-audit checks for?
 
-Use [ax-init](https://github.com/lucioduran/ax-init) — it generates `llms.txt`, `robots.txt`, an Agent Card, `security.txt`, structured data, and header snippets, then you verify with `npx ax-audit`. Check its output against this tool: the standards moved in 2026, and a generator written against the older paths will produce files agents no longer look for.
+Use [ax-init](https://github.com/axrush/ax-init) — it generates `llms.txt`, `robots.txt`, an Agent Card, `security.txt`, structured data, and header snippets, then you verify with `npx ax-audit`. Check its output against this tool: the standards moved in 2026, and a generator written against the older paths will produce files agents no longer look for.
 
 ## Still stuck?
 
-Open an issue at [github.com/lucioduran/ax-audit/issues](https://github.com/lucioduran/ax-audit/issues) with the output of `npx ax-audit <url> --verbose`.
+Open an issue at [github.com/axrush/ax-audit/issues](https://github.com/axrush/ax-audit/issues) with the output of `npx ax-audit <url> --verbose`.

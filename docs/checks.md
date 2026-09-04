@@ -23,7 +23,7 @@ Weights live in `CHECK_WEIGHTS` in `src/constants.ts`, and only there. Checks us
 
 Every probed path is labelled by standing — **IANA-registered**, **vendor convention**, **draft**, or **legacy** — because the agent web mixes registered URIs with drafts that get renamed. A missing draft file is not the same kind of finding as a missing registered one, and reports say which is which.
 
-This page documents the **exact scoring** of every check: each deduction, bonus, and formula, extracted from the source. Every finding links to a step-by-step remediation guide at `lucioduran.com/projects/ax-audit/guides/<check-id>`.
+This page documents the **exact scoring** of every check: each deduction, bonus, and formula, extracted from the source. Every finding links to a step-by-step remediation guide at `axrush.com/guides/<check-id>`.
 
 **Reading the tables:** each check starts at 100 unless noted. Deductions stack additively; `buildResult` clamps the final score to [0, 100]. "Hard fail" rows short-circuit the check.
 
