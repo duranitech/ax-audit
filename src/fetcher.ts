@@ -43,17 +43,26 @@ function mergeHeaders(custom?: Record<string, string>): Record<string, string> {
 }
 
 /**
- * Build a deterministic cache key for a URL + header combination. Headers are
- * lowercased and sorted so logically identical requests share one cache entry,
- * while requests that differ only in headers (e.g. `Accept: text/markdown`)
- * are cached separately — mirroring how `Vary: Accept` works on the wire.
+ * Build a deterministic cache key for a URL + request-shape combination.
+ * Headers are lowercased and sorted so logically identical requests share one
+ * cache entry, while requests that differ only in headers (e.g.
+ * `Accept: text/markdown`) are cached separately — mirroring how `Vary: Accept`
+ * works on the wire. Method and redirect mode are part of the key because a
+ * `HEAD` has no body and a `manual` redirect returns the 3xx itself, so they
+ * are different responses to the same URL.
  */
 function cacheKey(url: string, options?: FetchOptions): string {
-  if (!options?.headers || Object.keys(options.headers).length === 0) return url;
-  const normalized = Object.entries(options.headers)
-    .map(([name, value]) => [name.toLowerCase(), value] as const)
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-  return `${url}\u0000${JSON.stringify(normalized)}`;
+  const method = options?.method ?? 'GET';
+  const redirect = options?.redirect ?? 'follow';
+  const hasHeaders = options?.headers && Object.keys(options.headers).length > 0;
+  if (method === 'GET' && redirect === 'follow' && !hasHeaders) return url;
+
+  const normalized = hasHeaders
+    ? Object.entries(options!.headers!)
+        .map(([name, value]) => [name.toLowerCase(), value] as const)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    : [];
+  return `${url}\u0000${method}\u0000${redirect}\u0000${JSON.stringify(normalized)}`;
 }
 
 export function createFetcher({
@@ -69,28 +78,50 @@ export function createFetcher({
   async function attempt(url: string, options?: FetchOptions): Promise<FetchResponse> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout);
+    const started = performance.now();
 
     try {
       const response = await fetch(url, {
         signal: controller.signal,
+        method: options?.method ?? 'GET',
         headers: mergeHeaders(options?.headers),
-        redirect: 'follow',
+        redirect: options?.redirect ?? 'follow',
       });
 
-      const body = await response.text();
+      // A HEAD response has no body to read; `.text()` resolves to '' but the
+      // round-trip is wasted, so skip it and keep the empty-body contract.
+      const body = options?.method === 'HEAD' ? '' : await response.text();
+      const elapsedMs = Math.round(performance.now() - started);
 
       const headers: Record<string, string> = {};
       response.headers.forEach((value, key) => {
         headers[key.toLowerCase()] = value;
       });
 
-      log(`  ${response.status} ${response.statusText} (${body.length} bytes)`);
-      return { status: response.status, headers, body, ok: response.ok, url: response.url };
+      log(`  ${response.status} ${response.statusText} (${body.length} bytes, ${elapsedMs}ms)`);
+      return {
+        status: response.status,
+        headers,
+        body,
+        ok: response.ok,
+        url: response.url || url,
+        elapsedMs,
+        redirected: response.redirected,
+        ...(headers['location'] !== undefined ? { redirectLocation: headers['location'] } : {}),
+      };
     } catch (err: unknown) {
       const error = err instanceof Error ? err : new Error(String(err));
       const errorMsg = error.name === 'AbortError' ? 'Request timed out' : error.message;
       log(`  ERROR: ${errorMsg}`);
-      return { status: 0, headers: {}, body: '', ok: false, url, error: errorMsg };
+      return {
+        status: 0,
+        headers: {},
+        body: '',
+        ok: false,
+        url,
+        error: errorMsg,
+        elapsedMs: Math.round(performance.now() - started),
+      };
     } finally {
       clearTimeout(timer);
     }

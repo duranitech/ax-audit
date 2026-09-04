@@ -15,13 +15,43 @@ export interface CheckResult {
   score: number;
   findings: Finding[];
   duration: number;
+  /**
+   * `false` when the check does not apply to this site (no API surface for
+   * `api-discovery`, no commerce signals for `commerce-discovery`, ...).
+   * Not-applicable checks are reported as N/A and excluded from the weighted
+   * denominator instead of scoring 0. Absent means applicable.
+   */
+  applicable?: boolean;
+  /** Category used to group results in reports. Mirrors `CheckMeta.category`. */
+  category?: CheckCategory;
 }
+
+/**
+ * Report grouping for a check. Categories describe *what kind of readiness*
+ * a check measures, so reports can summarise per area rather than as one
+ * undifferentiated list of 20+ checks.
+ *
+ * - `content`    — is there substance an agent can read and quote?
+ * - `discovery`  — can an agent find the site's machine-readable entry points?
+ * - `access`     — can an agent actually retrieve it (crawler policy, WAFs, HTTP hygiene)?
+ * - `policy`     — what are the declared usage rights, and are they consistent?
+ * - `protocols`  — callable surfaces: A2A, MCP, OpenAPI, skills, commerce.
+ */
+export type CheckCategory = 'content' | 'discovery' | 'access' | 'policy' | 'protocols';
 
 export interface CheckMeta {
   id: string;
   name: string;
   description: string;
   weight: number;
+  /** Report grouping. Falls back to `CHECK_CATEGORIES[id]` when omitted. */
+  category?: CheckCategory;
+  /**
+   * Former ids for this check. `--checks` selection and baseline diffing
+   * resolve aliases, so renaming a check never silently drops a saved
+   * baseline entry or breaks an existing CI invocation.
+   */
+  aliases?: string[];
 }
 
 export interface FetchResponse {
@@ -31,6 +61,12 @@ export interface FetchResponse {
   ok: boolean;
   url: string;
   error?: string;
+  /** Wall-clock duration of the request in milliseconds (undefined for synthetic responses). */
+  elapsedMs?: number;
+  /** Whether the fetch followed at least one redirect before producing this response. */
+  redirected?: boolean;
+  /** `Location` header value when the request was made with `redirect: 'manual'` and got a 3xx. */
+  redirectLocation?: string;
 }
 
 /** Per-request options for the audit fetcher. */
@@ -41,6 +77,18 @@ export interface FetchOptions {
    * the default one. Header names are case-insensitive.
    */
   headers?: Record<string, string>;
+  /**
+   * HTTP method. `HEAD` is used for cheap liveness probes (llms.txt link
+   * sampling, catalog entry resolution) where the body is irrelevant.
+   * Default `GET`.
+   */
+  method?: 'GET' | 'HEAD';
+  /**
+   * Redirect handling. `manual` returns the 3xx response itself with
+   * `redirectLocation` populated, so checks can count hops and inspect
+   * redirect targets. Default `follow`.
+   */
+  redirect?: 'follow' | 'manual';
 }
 
 export interface CheckContext {

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import type { Grade, SecurityHeader } from './types.js';
+import type { CheckCategory, Grade, SecurityHeader } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'));
@@ -119,6 +119,31 @@ export const CHECK_WEIGHTS: Record<string, number> = {
   rsl: 0,
   'agent-access': 0,
   'crawl-efficiency': 0,
+};
+
+/**
+ * Report grouping per check. A check's own `meta.category` takes precedence.
+ * Mirrors the `CHECK_WEIGHTS` pattern: data lives here, overrides live on the check.
+ */
+export const CHECK_CATEGORIES: Record<string, CheckCategory> = {
+  'llms-txt': 'discovery',
+  'robots-txt': 'discovery',
+  'http-headers': 'discovery',
+  'meta-tags': 'discovery',
+  sitemap: 'discovery',
+  'html-rendering': 'content',
+  'structured-data': 'content',
+  'seo-basics': 'content',
+  'content-negotiation': 'content',
+  'agent-access': 'access',
+  'crawl-efficiency': 'access',
+  'tls-https': 'access',
+  rsl: 'policy',
+  'security-txt': 'policy',
+  'agent-card': 'protocols',
+  'mcp-discovery': 'protocols',
+  'api-discovery': 'protocols',
+  'well-known-ai': 'protocols',
 };
 
 export const GRADES: Grade[] = [
