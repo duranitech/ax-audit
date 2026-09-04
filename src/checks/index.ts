@@ -8,7 +8,7 @@ import structuredData, { meta as structuredDataMeta } from './structured-data.js
 import metaTags, { meta as metaTagsMeta } from './meta-tags.js';
 import openapi, { meta as openapiMeta } from './openapi.js';
 import httpHeaders, { meta as httpHeadersMeta } from './http-headers.js';
-import mcp, { meta as mcpMeta } from './mcp.js';
+import mcpDiscovery, { meta as mcpDiscoveryMeta } from './mcp-discovery.js';
 import htmlRendering, { meta as htmlRenderingMeta } from './html-rendering.js';
 import sitemap, { meta as sitemapMeta } from './sitemap.js';
 import seoBasics, { meta as seoBasicsMeta } from './seo-basics.js';
@@ -28,7 +28,7 @@ export const checks: CheckModule[] = [
   { run: metaTags, meta: metaTagsMeta },
   { run: openapi, meta: openapiMeta },
   { run: httpHeaders, meta: httpHeadersMeta },
-  { run: mcp, meta: mcpMeta },
+  { run: mcpDiscovery, meta: mcpDiscoveryMeta },
   { run: htmlRendering, meta: htmlRenderingMeta },
   { run: sitemap, meta: sitemapMeta },
   { run: seoBasics, meta: seoBasicsMeta },

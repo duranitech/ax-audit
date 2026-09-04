@@ -588,7 +588,7 @@ export const CHECK_WEIGHTS: Record<string, number> = {
   'structured-data': 9,
   'http-headers': 9,
   'agent-card': 7,
-  mcp: 7,
+  'mcp-discovery': 7,
   'seo-basics': 7,
   'security-txt': 6,
   'meta-tags': 6,
@@ -728,6 +728,41 @@ export const A2A_MEDIA_TYPE = 'application/a2a+json';
 
 /** @deprecated Superseded by AGENT_CARD_REQUIRED_V03 / _V1 in 3.7. Kept for one minor. */
 export const AGENT_JSON_REQUIRED_FIELDS: string[] = ['name', 'description', 'url', 'skills'];
+
+/**
+ * Model Context Protocol.
+ *
+ * `/.well-known/mcp.json` was never part of the specification; ax-audit
+ * recommended it before the ecosystem settled. The actual discovery work is
+ * SEP-2127 (open draft) and the `experimental-ext-server-card` repository,
+ * which recommend a **server card** at `<streamable-http-url>/server-card` and
+ * an entry in `/.well-known/ai-catalog.json`. Cloudflare and Mintlify serve one
+ * at `/.well-known/mcp/server-card.json`.
+ *
+ * Server cards deliberately carry no `tools[]`: tool lists come from a live
+ * `tools/list` call, not from a static document that would immediately drift.
+ */
+export const MCP_SERVER_CARD_MEDIA_TYPE = 'application/mcp-server-card+json';
+export const MCP_SERVER_CARD_REQUIRED: string[] = ['$schema', 'name', 'version', 'description'];
+export const MCP_REMOTE_TYPES: string[] = ['streamable-http', 'sse'];
+
+/**
+ * Released MCP protocol versions, newest first. `2026-07-28` removed sessions
+ * and `initialize`, made `MCP-Protocol-Version`, `Mcp-Method` and `Mcp-Name`
+ * mandatory on every POST, and added the `server/discover` RPC.
+ * https://modelcontextprotocol.io/specification/versioning
+ */
+export const MCP_PROTOCOL_VERSIONS: string[] = ['2026-07-28', '2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
+
+/** Versions old enough that a card advertising only these is worth flagging. */
+export const MCP_STALE_PROTOCOL_VERSIONS: string[] = ['2024-11-05', '2025-03-26'];
+
+/** Media types an ai-catalog entry may declare, per the Agent Card WG draft. */
+export const AI_CATALOG_ENTRY_TYPES: Record<string, string> = {
+  'application/mcp-server-card+json': 'MCP server card',
+  'application/a2a-agent-card+json': 'A2A agent card',
+  'application/ai-catalog+json': 'nested AI catalog',
+};
 
 export const SECURITY_TXT_REQUIRED_FIELDS: string[] = ['Contact', 'Expires'];
 
