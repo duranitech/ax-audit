@@ -38,6 +38,56 @@ export function parseLinkHeader(header: string): LinkEntry[] {
   return entries;
 }
 
+/**
+ * Report the discovery relations a site advertises beyond llms.txt and the
+ * Agent Card. Each one saves an agent a round of path guessing, and several
+ * point at resources no amount of guessing would find.
+ */
+function reportDiscoveryRelations(links: LinkEntry[], headers: Record<string, string>, findings: Finding[]): void {
+  const present: string[] = [];
+  const missing: { label: string; note: string }[] = [];
+
+  for (const { rel, label, note } of DISCOVERY_RELATIONS) {
+    const found = links.some((l) => (l.params['rel'] ?? '').split(/\s+/).includes(rel));
+    if (found) present.push(label);
+    else missing.push({ label, note });
+  }
+
+  const markdownAlternate = links.some(
+    (l) =>
+      (l.params['rel'] ?? '').split(/\s+/).includes('alternate') && (l.params['type'] ?? '').includes('text/markdown'),
+  );
+  if (markdownAlternate) present.push('alternate (text/markdown)');
+
+  if (headers['x-llms-txt'] !== undefined) {
+    findings.push({
+      status: 'pass',
+      message: 'X-Llms-Txt header advertises the llms.txt location',
+      detail: headers['x-llms-txt'],
+    });
+  }
+
+  if (present.length > 0) {
+    findings.push({
+      status: 'pass',
+      message: `${present.length} additional discovery relation(s) advertised: ${present.join(', ')}`,
+    });
+  }
+
+  if (missing.length === DISCOVERY_RELATIONS.length && !markdownAlternate) {
+    findings.push({
+      status: 'warn',
+      message: 'No machine-readable discovery relations beyond llms.txt and the Agent Card',
+      detail: DISCOVERY_RELATIONS.map((r) => `${r.label} — ${r.note}`).join('\n'),
+      hint:
+        'Advertise what you publish with Link relations so agents stop guessing paths. Add the ones that apply, ' +
+        'for example: Link: </llms.txt>; rel="describedby", </.well-known/api-catalog>; rel="api-catalog". ' +
+        'Informational in 3.x: this does not affect your score.',
+      learnMoreUrl: guideUrl(meta.id, 'discovery-relations'),
+    });
+  }
+}
+
 /** Split a Link header value by commas, respecting angle brackets. */
 function splitLinkHeader(header: string): string[] {
   const parts: string[] = [];
@@ -77,7 +127,30 @@ export const meta: CheckMeta = {
   name: 'HTTP Headers',
   description: 'Checks security headers, AI discovery Link headers, and CORS',
   weight: 9,
+  category: 'discovery',
 };
+
+/**
+ * Link relations that tell an agent where a site's machine-readable resources
+ * live. Discovery by link beats discovery by guessing: an agent that has to try
+ * known filenames finds only the ones it already knows to look for.
+ *
+ * Reported, never required — several of these relations come from drafts, and
+ * a site that publishes none of them is not doing anything wrong.
+ */
+const DISCOVERY_RELATIONS: { rel: string; label: string; note: string }[] = [
+  {
+    rel: 'describedby',
+    label: 'describedby',
+    note: 'llms.txt v2 uses this relation to point a page at the llms.txt that covers it.',
+  },
+  { rel: 'api-catalog', label: 'api-catalog', note: 'RFC 9727: the catalog of APIs this publisher offers.' },
+  { rel: 'service-desc', label: 'service-desc', note: 'RFC 8631: a machine-readable API description.' },
+  { rel: 'service-doc', label: 'service-doc', note: 'RFC 8631: human documentation for the API.' },
+  { rel: 'ai-catalog', label: 'ai-catalog', note: 'Draft: the AI catalog listing agent cards and MCP server cards.' },
+  { rel: 'c2pa-manifest', label: 'c2pa-manifest', note: 'C2PA 2.4: content provenance for media on the page.' },
+  { rel: 'license', label: 'license', note: 'RSL and other machine-readable licensing terms.' },
+];
 
 export default async function check(ctx: CheckContext): Promise<CheckResult> {
   const start = performance.now();
@@ -190,6 +263,9 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
       message: 'X-Robots-Tag: noindex on /llms.txt (prevents search indexing of raw text)',
     });
   }
+
+  // Informational in 3.x: new findings inside a weighted check must not deduct.
+  reportDiscoveryRelations(links, headers, findings);
 
   return buildResult(meta, score, findings, start);
 }

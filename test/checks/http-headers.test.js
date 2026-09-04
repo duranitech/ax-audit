@@ -247,3 +247,97 @@ describe('http-headers: Agent Card path migration', () => {
     assert.ok(result.findings.some((f) => f.status === 'pass' && f.message.includes('CORS enabled')));
   });
 });
+
+describe('http-headers: discovery relations', () => {
+  const SECURE = {
+    'strict-transport-security': 'max-age=31536000',
+    'x-content-type-options': 'nosniff',
+    'x-frame-options': 'DENY',
+    'referrer-policy': 'no-referrer',
+  };
+
+  it('should report the relations a site advertises', async () => {
+    const ctx = mockContext(
+      {},
+      {
+        headers: {
+          ...SECURE,
+          link: [
+            '</llms.txt>; rel="describedby"',
+            '</.well-known/api-catalog>; rel="api-catalog"',
+            '</openapi.json>; rel="service-desc"',
+          ].join(', '),
+        },
+      },
+    );
+    const result = await check(ctx);
+    const finding = result.findings.find(f => f.message.includes('additional discovery relation'));
+    assert.ok(finding);
+    assert.ok(finding.message.includes('describedby'));
+    assert.ok(finding.message.includes('api-catalog'));
+    assert.ok(finding.message.includes('service-desc'));
+  });
+
+  it('should recognise a markdown alternate as a discovery relation', async () => {
+    const ctx = mockContext(
+      {},
+      { headers: { ...SECURE, link: '</index.md>; rel="alternate"; type="text/markdown"' } },
+    );
+    const result = await check(ctx);
+    assert.ok(result.findings.some(f => f.message.includes('alternate (text/markdown)')));
+  });
+
+  it('should match a relation inside a multi-valued rel', async () => {
+    const ctx = mockContext({}, { headers: { ...SECURE, link: '</llms.txt>; rel="alternate describedby"' } });
+    const result = await check(ctx);
+    assert.ok(result.findings.some(f => f.message.includes('describedby')));
+  });
+
+  it('should read the X-Llms-Txt header', async () => {
+    const ctx = mockContext({}, { headers: { ...SECURE, 'x-llms-txt': 'https://example.com/llms.txt' } });
+    const result = await check(ctx);
+    const finding = result.findings.find(f => f.message.includes('X-Llms-Txt'));
+    assert.ok(finding);
+    assert.ok(finding.detail.includes('https://example.com/llms.txt'));
+  });
+
+  it('should explain each relation when none is advertised', async () => {
+    const ctx = mockContext({}, { headers: SECURE });
+    const result = await check(ctx);
+    const finding = result.findings.find(f => f.message.includes('No machine-readable discovery relations'));
+    assert.ok(finding);
+    assert.ok(finding.detail.includes('RFC 9727'));
+    assert.ok(finding.detail.includes('llms.txt v2'));
+    assert.ok(finding.hint.includes('does not affect your score'));
+  });
+
+  it('should not deduct for missing discovery relations in 3.x', async () => {
+    // Both headers reference llms.txt and the Agent Card, so the pre-3.7
+    // deductions are identical; only the extra relations differ.
+    const withoutExtras = await check(
+      mockContext(
+        {},
+        { headers: { ...SECURE, link: '</llms.txt>; rel="alternate", </.well-known/agent-card.json>; rel="alternate"' } },
+      ),
+    );
+    const withExtras = await check(
+      mockContext(
+        {},
+        {
+          headers: {
+            ...SECURE,
+            link: [
+              '</llms.txt>; rel="alternate"',
+              '</.well-known/agent-card.json>; rel="alternate"',
+              '</.well-known/api-catalog>; rel="api-catalog"',
+              '</openapi.json>; rel="service-desc"',
+            ].join(', '),
+          },
+        },
+      ),
+    );
+    assert.equal(withoutExtras.score, 100);
+    assert.equal(withExtras.score, 100, 'a new finding inside a weighted check must be informational in 3.x');
+    assert.ok(withExtras.findings.some(f => f.message.includes('additional discovery relation')));
+  });
+});
