@@ -19,6 +19,7 @@ import rsl, { meta as rslMeta } from './rsl.js';
 import agentAccess, { meta as agentAccessMeta } from './agent-access.js';
 import crawlEfficiency, { meta as crawlEfficiencyMeta } from './crawl-efficiency.js';
 import aiDirectives, { meta as aiDirectivesMeta } from './ai-directives.js';
+import usagePolicy, { meta as usagePolicyMeta } from './usage-policy.js';
 
 export const checks: CheckModule[] = [
   { run: llmsTxt, meta: llmsTxtMeta },
@@ -40,4 +41,5 @@ export const checks: CheckModule[] = [
   { run: agentAccess, meta: agentAccessMeta },
   { run: crawlEfficiency, meta: crawlEfficiencyMeta },
   { run: aiDirectives, meta: aiDirectivesMeta },
+  { run: usagePolicy, meta: usagePolicyMeta },
 ];
