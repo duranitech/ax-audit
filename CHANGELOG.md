@@ -2,6 +2,53 @@
 
 All notable changes to ax-audit are documented here.
 
+## [3.7.0] - 2026-09-04
+
+A correction release. Three checks were probing paths that are no longer, or never were, the standard, and the crawler catalogue had drifted far enough to contain tokens that do not exist. Everything here was re-verified against vendor documentation, IANA, IETF datatracker and the relevant specification repositories on 2026-09-04.
+
+**No score goes down.** Every correction that would have lowered an existing score is frozen behind a constant that is removed in 4.0, and tests assert it.
+
+### Fixed — wrong paths
+
+- **A2A Agent Card moved.** The check probed `/.well-known/agent.json`. A2A relocated the card to `/.well-known/agent-card.json` in v0.3.0 (2025-07-30), and that path is IANA-registered. Both are probed, the registered one first; a card served only from the old path is validated and flagged. The check also handles both spec generations: A2A 1.0 (2026-03-12) folded `url`, `protocolVersion`, `preferredTransport` and `additionalInterfaces` into `supportedInterfaces[]`, and the generation is detected from the card's own structure rather than a version field. `authentication`, removed in 0.2.x in favour of `securitySchemes`, is now flagged. Renamed `agent-json` → `agent-card`.
+- **`/.well-known/mcp.json` was never an MCP convention.** ax-audit recommended it before the ecosystem settled. Discovery now walks the real chain: `/.well-known/ai-catalog.json`, `/.well-known/mcp/server-card.json`, `<endpoint>/server-card`, then the legacy manifest. Server cards deliberately carry no `tools[]` — tool lists come from a live `tools/list` call. Protocol versions are checked against the five released revisions, with `2026-07-28` current. Renamed `mcp` → `mcp-discovery`.
+- **`/.well-known/openapi.json` is a folk convention**, so a site publishing at `/openapi.json` scored zero. Discovery now runs in order of authority: RFC 9727's registered `/.well-known/api-catalog`, then RFC 8631 `service-desc` relations in headers and HTML, then ten conventional paths. YAML descriptions are recognised and reported as surface-validated only, since ax-audit ships no YAML parser. Renamed `openapi` → `api-discovery`.
+- **`agent-access` was probing with `Google-Extended`.** That string is a robots.txt control token governing how an already-crawled page may be used; no request carries it, so the probe tested nothing. Token-only controls are excluded, leaving 10 real crawlers.
+- **`http-headers` and `meta-tags` penalised correct behaviour**, requiring a discovery link to `agent.json` specifically. Either card path now counts.
+- **An SPA catch-all page is absence, not corruption.** Found by running the new checks against a real site: probing `/mcp/server-card` returned HTTP 200 with the application's index shell, and the check reported a malformed server card on a site with no MCP server. `isHtmlDocument` now gates the speculative probes in `agent-card`, `mcp-discovery` and `api-discovery`.
+
+### Fixed — crawler catalogue
+
+Verified against vendor documentation on 2026-09-04. Removed tokens that were never real user agents (`Gemini`, `GeminiBot`, `DeepSeek-AI`), whose products were discontinued (`NeevaBot`, `Operator`, `GoogleAgent-Mariner`), whose vendor operates no crawlers (Cohere), or that are not AI crawlers at all (the Awario social-listening family). Reclassified five user-triggered fetchers that were listed as training crawlers. Added `meta-webindexer`, `Amzn-SearchBot`, `Amzn-User`, `MistralAI-Index`, `MistralAI-Training`, `Google-GeminiNotebook`, `Applebot`, `ExaSearchBot`, `TikTokSpider`, `OAI-AdsBot`, `YandexAdditional`.
+
+The catalogue is now organised by what a client does with a page — training, search, user-fetch, agent — because that determines the cost of blocking it. `CRAWLER_META` carries per token the vendor, whether robots.txt is honored, the published IP list, whether requests are signed with Web Bot Auth, and one sentence on what blocking costs. Findings quote it: "blocking OAI-SearchBot removes you from ChatGPT search answers", not "1 AI crawler blocked".
+
+### Added
+
+- **Response classification.** `checks/waf.ts` distinguishes a deliberate block from a JavaScript challenge from anti-spoofing, because the remedies are completely different. Signatures verified 2026-09-04: `cf-mitigated: challenge`, `x-vercel-mitigated`, AWS WAF's 202 with `x-amzn-waf-action`, Cloudflare pay-per-crawl's `crawler-price`, x402's `payment-signature`, Web Bot Auth's `Accept-Signature`, RSL's `WWW-Authenticate: License`, plus thirteen body markers. Outcomes an unsigned probe cannot settle are scored at 0.75 and labelled inconclusive with the header observed — never as "blocks AI crawlers".
+- **IETF AIPREF `Content-Usage:`** in robots.txt (draft-ietf-aipref-attach-05), with an optional path scope and a Structured Fields dictionary. The loudest finding is a vocabulary mix-up: AIPREF spells the training token `train-ai` with `y`/`n` while Content Signals and RSL spell it `ai-train` with `yes`/`no`, so `Content-Usage: ai-train=no` looks correct and does nothing.
+- **Content Signals `use=immediate|reference|full`**, the fourth field Cloudflare added on 2026-07-01 and now serves from managed robots.txt. Cloudflare-managed blocks are detected and named.
+- **Discovery link relations** in `http-headers`: `describedby` (llms.txt v2), `api-catalog` (RFC 9727), `service-desc` and `service-doc` (RFC 8631), `ai-catalog`, `c2pa-manifest`, `license`, markdown alternates, and the `X-Llms-Txt` header.
+- **Content parity** in `agent-access` now fingerprints title, h1 and JSON-LD block count, catching cloaking that preserves word count.
+- **Current well-known files** reported but never scored: the Web Bot Auth key directory, TDMRep, the OpenAI Apps verification token, `AGENTS.md`.
+- **Fetcher transport options**: `method: 'HEAD'` and `redirect: 'manual'`, with `elapsedMs`, `redirected` and `redirectLocation` on every response.
+- **Check categories** (content / discovery / access / policy / protocols) and `CheckResult.applicable` for N/A reporting, both consumed by reporters in 3.8.
+- **`docs/roadmap.md`**: the research behind this release and the plan through 4.0.
+
+### Changed
+
+- **robots.txt is parsed once.** `checks/robots-parser.ts` replaces three separate parsers that disagreed about what closes a User-agent group. Two parsing bugs fell out: `Disallow:` with an empty value now correctly means "allow all" per RFC 9309 §2.2.2 instead of being ignored, and a bot named in two groups is merged so a later `Disallow: /` is no longer hidden by an earlier `Allow: /`.
+- **`well-known-ai` tells the truth.** Re-verification found three of its five scored files have no consumer: `/.well-known/nlweb.json` **does not exist** in any NLWeb release, document or commit (NLWeb exposes `/ask` and `/mcp`); `genai.txt` has no specification; `/ai-plugin.json` described ChatGPT plugins, shut down 2024-04-09. Omitting a retired format now reads as a pass with the evidence attached. The formula stays frozen for score stability; the check loses its weight and its retired probes in 4.0.
+- **Renamed check ids keep working.** `CheckMeta.aliases` plus `src/check-ids.ts` resolve former ids in `--checks` selection and in baseline diffing, so a rename does not read as one check removed at a full regression and one added at zero.
+
+### Scoring
+
+Unchanged. `robots-txt` deducts against the frozen eight-token core set and the token list 3.6 recognised; a site whose only MCP document is the legacy manifest is validated with the pre-3.7 rules reproduced exactly; `well-known-ai` keeps its five-file formula; every finding added inside a weighted check is informational. Broadened discovery can only raise a score, never lower one. Both freezes are removed in 4.0.
+
+### Tests
+
+553 total, up from 301. New suites: robots parser, structured fields, crawler catalogue, WAF classification, check-id aliasing, well-known registry, SPA-shell guard, fetcher transport. Two classes of test exist specifically to hold the no-regression promise: score-stability tests asserting a 3.6 perfect configuration still scores 100, and informational-finding tests asserting new findings leave scores untouched.
+
 ## [3.6.0] - 2026-06-06
 
 ### Added

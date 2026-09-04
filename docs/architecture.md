@@ -17,7 +17,7 @@ cli.ts ──► orchestrator.ts ──► checks/* (Promise.allSettled, paralle
 1. **cli.ts** parses and validates flags, loads the baseline if requested, and dispatches to single or batch mode.
 2. **orchestrator.ts** (`audit`) creates one fetcher per run, fetches the homepage once, builds the `CheckContext` (`url`, `html`, `headers`, `fetch`), and runs all selected checks in parallel. A check that throws is converted into a score-0 result with the error as a finding — one bad check never kills the audit. `batchAudit` runs `audit` per URL through an order-preserving work queue with configurable `concurrency`.
 3. **fetcher.ts** wraps `fetch` with: per-run in-memory caching keyed on URL + normalized (lowercased, sorted) custom headers — mirroring HTTP `Vary` semantics so a `text/markdown` probe never collides with the HTML fetch; case-insensitive header merging over defaults; timeouts via `AbortController`; and retries with exponential backoff for transient failures (status 0, 408, 425, 429, 5xx). Errors never throw — they become `{ status: 0, ok: false, error }` results, also cached.
-4. **checks/** — one module per check (18). Each exports `default` (async check function) and `meta` (`{ id, name, description, weight }`).
+4. **checks/** — one module per check (18). Each exports `default` (async check function) and `meta` (`{ id, name, description, weight, category?, aliases? }`).
 5. **scorer.ts** computes the weighted average; when all selected checks have weight 0 it falls back to a plain average.
 6. **reporter/** renders to terminal (chalk), JSON, self-contained HTML, or Markdown.
 7. **baseline.ts** persists minimal score snapshots and computes per-check diffs for regression gating.
@@ -63,6 +63,11 @@ Conventions:
 - **Findings are actionable.** Every `warn`/`fail` carries a `hint` with concrete remediation and a `learnMoreUrl` pointing to `lucioduran.com/projects/ax-audit/guides/<check-id>#<anchor>`. Every anchor must have a section in that guide.
 - **Scores are clamped** to [0, 100] by `buildResult`.
 - **Shared HTML primitives** live in `checks/html-utils.ts` (`getMetaContent`, `findLinkTags`, `getAttribute`, `extractVisibleText`, …) — no per-check regex duplication.
+- **robots.txt is parsed once**, by `checks/robots-parser.ts`. It returns User-agent groups with their rules plus `Content-Signal`, `Content-Usage`, `License`, `Sitemap` and `Agentmap` directives. `robots-txt`, `rsl` and `agent-access` all consume it, so the grouping rules have one definition.
+- **Responses are classified**, not just status-checked. `checks/waf.ts` turns a response into ok / challenge / paywall / needs-signature / license-required / rate-limited / blocked, with the evidence that produced it and an `inconclusive` flag for what an unsigned probe cannot settle.
+- **Probed paths carry their standing.** `checks/well-known.ts` records every path as IANA-registered, vendor convention, draft or legacy, so a missing draft file is never reported like a missing registered one.
+- **An HTML body means absent, not broken.** `isHtmlDocument` in `checks/utils.ts` gates speculative probes: an SPA catch-all returns its index shell for every unknown path, and reporting that as a malformed document sends operators hunting for a bug in a file they never wrote.
+- **Check ids are a public interface** — they appear in `--checks` flags and in saved baselines. A rename declares the old id in `meta.aliases`; `src/check-ids.ts` resolves aliases for selection and for baseline diffing.
 - **Content-Type validation** uses `checkContentType` from `checks/utils.ts` (−5 convention for mismatches).
 - **Network goes through `ctx.fetch`** — never raw `fetch` — so caching, retries, timeouts, and `--verbose` logging apply uniformly.
 
@@ -85,4 +90,6 @@ Score deltas on the same site are treated as **breaking** (see CHANGELOG 3.0.0).
 
 ## Testing
 
-`npm test` builds (`tsc`) and runs `node --test`. The suite (301 tests) covers every check, the scorer, baseline logic, the Markdown reporter, plus integration tests that spin up real local HTTP servers for the fetcher (per-header caching, retries) and the batch orchestrator (ordering, concurrency caps). No test dependencies beyond Node.
+`npm test` builds (`tsc`) and runs `node --test`. The suite (553 tests) covers every check, the scorer, baseline logic, the Markdown reporter, plus integration tests that spin up real local HTTP servers for the fetcher (per-header caching, retries, HEAD and manual redirects) and the batch orchestrator (ordering, concurrency caps). No test dependencies beyond Node.
+
+Two classes of test exist specifically to keep the 3.x promise that no score goes down: **score-stability tests** assert that a configuration which scored 100 in 3.6 still scores 100, and that findings added inside a weighted check leave the score untouched. When those fail, the change belongs in the next major, not the current minor.

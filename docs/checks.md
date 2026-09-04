@@ -2,6 +2,8 @@
 
 ax-audit runs 18 checks. Fourteen are **weighted** (summing to 100% of the overall score); four are **informational** in 3.x — they run and report findings but carry weight 0 until v4.0, because score-affecting changes are treated as breaking (see [CHANGELOG 3.0.0](../CHANGELOG.md)).
 
+Every probed path is labelled by standing — **IANA-registered**, **vendor convention**, **draft**, or **legacy** — because the agent web mixes registered URIs with drafts that get renamed. A missing draft file is not the same kind of finding as a missing registered one, and reports say which is which.
+
 This page documents the **exact scoring** of every check: each deduction, bonus, and formula, extracted from the source. Every finding links to a step-by-step remediation guide at `lucioduran.com/projects/ax-audit/guides/<check-id>`.
 
 **Reading the tables:** each check starts at 100 unless noted. Deductions stack additively; `buildResult` clamps the final score to [0, 100]. "Hard fail" rows short-circuit the check.
@@ -27,7 +29,9 @@ This page documents the **exact scoring** of every check: each deduction, bonus,
 
 ### `robots-txt` — 11%
 
-AI-crawler configuration. Core crawlers: GPTBot, ClaudeBot, ChatGPT-User, Claude-SearchBot, Google-Extended, PerplexityBot, OAI-SearchBot, CCBot.
+AI-crawler configuration. Scoring runs against the frozen 3.x core set (GPTBot, ClaudeBot, ChatGPT-User, Claude-SearchBot, Google-Extended, PerplexityBot, OAI-SearchBot, CCBot); the wider September-2026 core set adds Meta-ExternalAgent, Applebot-Extended, Amazonbot and Bytespider, reported but not scored until 4.0.
+
+Findings are tiered by what a client does with a page, because that determines the cost of blocking it. Blocking a **training** crawler is a policy choice and is reported as such. Blocking a **search** crawler removes the site from that assistant's answers. Blocking a **user-triggered fetcher** often does nothing, because most vendors document that robots.txt may not apply to them.
 
 | Condition | Points |
 | --- | --- |
@@ -38,7 +42,10 @@ AI-crawler configuration. Core crawlers: GPTBot, ClaudeBot, ChatGPT-User, Claude
 | Known AI crawler(s) explicitly blocked (`Disallow: /`) | −3 per crawler |
 | No `Sitemap:` directive | −5 |
 | Partial path restrictions on AI crawlers | warn only, 0 |
-| [Content Signals](https://contentsignals.org) findings (declared / malformed / unknown / missing) | informational, 0 in 3.x |
+| Blocking a crawler token added in 3.7 (`meta-webindexer`, `Amzn-SearchBot`, …) | informational, 0 in 3.x |
+| Rules targeting a retired or fictional token (`GeminiBot`, `Claude-Web`, `NeevaBot`, …) | informational, 0 |
+| [Content Signals](https://contentsignals.org) findings, including the `use=immediate\|reference\|full` field | informational, 0 in 3.x |
+| [IETF AIPREF](https://datatracker.ietf.org/wg/aipref/documents/) `Content-Usage:` findings, including vocabulary mix-ups | informational, 0 in 3.x |
 
 ### `html-rendering` — 9%
 
@@ -75,51 +82,76 @@ JSON-LD on the homepage. Key entity types: Person, Organization, WebSite, WebPag
 
 ### `http-headers` — 9%
 
-Security headers, AI discovery `Link` headers (RFC 5988-parsed), CORS on `.well-known`.
+Security headers, AI discovery `Link` headers (RFC 5988-parsed), CORS on `.well-known`. Either Agent Card path satisfies the discovery-link requirement.
 
 | Condition | Points |
 | --- | --- |
 | No headers retrievable | **hard fail → 0** |
 | Missing critical security header (HSTS, X-Content-Type-Options) | −10 each |
 | Only 1–3 of the 7 tracked security headers present | −5 |
-| `Link` header missing both llms.txt and agent.json references | −15 |
+| `Link` header missing both llms.txt and the Agent Card | −15 |
 | `Link` header missing one of the two | −5 |
-| No CORS on `/.well-known/agent.json` | −10 |
+| No CORS on the Agent Card | −10 |
+| Additional discovery relations (`describedby`, `api-catalog`, `service-desc`, `service-doc`, `ai-catalog`, `c2pa-manifest`, `license`, markdown `alternate`) and the `X-Llms-Txt` header | informational, 0 in 3.x |
 
-### `agent-json` — 7%
+### `agent-card` — 7%
 
-`/.well-known/agent.json` [A2A Agent Card](https://a2a-protocol.org). Required fields: `name`, `description`, `url`, `skills`.
+The [A2A Agent Card](https://a2a-protocol.org), probed at `/.well-known/agent-card.json` (IANA-registered since A2A v0.3.0, 2025-07-30) and then at the pre-0.3 path `/.well-known/agent.json`. *Former id: `agent-json`, still accepted in `--checks` and in saved baselines.*
+
+Two spec generations are in the wild, and the check detects which one a card follows from its own structure rather than from a version field:
+
+- **A2A 1.0** (2026-03-12) declares every endpoint inside `supportedInterfaces[]`. Required: `name`, `description`, `version`, `capabilities`, `supportedInterfaces`, `defaultInputModes`, `defaultOutputModes`, `skills`.
+- **A2A 0.3** declares a top-level `url` and `protocolVersion`. Required: those two plus `name`, `description`, `version`, `capabilities`, `defaultInputModes`, `defaultOutputModes`, `skills`.
 
 | Condition | Points |
 | --- | --- |
-| Not found | **hard fail → 0** |
+| Not found at either path | **hard fail → 0** |
 | Invalid JSON | **→ 10** |
-| Wrong Content-Type (expected `application/json`) | −5 |
-| Missing required field | −15 per field |
-| `url` on a different origin | −5 |
-| `url` not an absolute URL | −5 |
+| Served only from the pre-0.3 `agent.json` path | warn only, 0 |
+| Wrong Content-Type (expected `application/json` or `application/a2a+json`) | −5 |
+| Card shape matches neither generation | −30 |
+| Missing required field for the detected generation | −15 per field |
+| `supportedInterfaces[]` empty (1.0) | −15 |
+| Interface missing `url`, `protocolBinding` or `protocolVersion` (1.0) | −10 |
+| Unrecognised `protocolBinding` (not JSONRPC / GRPC / HTTP+JSON) | −5 |
+| Interface or `url` on a different origin | −5 |
+| `url` not an absolute URL (0.3) | −5 |
 | `skills` empty | −10 |
 | `skills` entries missing `id` or `description` | −5 |
-| No `protocolVersion` | −5 |
-| No optional fields (`capabilities`, `authentication`, `documentationUrl`) | −5 |
+| Uses `authentication`, removed from the spec in 0.2.x | −5 |
+| No optional descriptive fields (`provider`, `documentationUrl`, `iconUrl`) | −5 |
 
-### `mcp` — 7%
+### `mcp-discovery` — 7%
 
-`/.well-known/mcp.json` [Model Context Protocol](https://modelcontextprotocol.io) server configuration.
+How an agent finds this site's [Model Context Protocol](https://modelcontextprotocol.io) server. *Former id: `mcp`.*
+
+`/.well-known/mcp.json` was never part of the MCP specification. What emerged instead is the **server card**, which deliberately carries no `tools[]` — tool lists come from a live `tools/list` call, and a static copy drifts the day it is written. Discovery is probed in this order:
+
+1. `/.well-known/ai-catalog.json` entries of type `application/mcp-server-card+json` *(draft)*
+2. `/.well-known/mcp/server-card.json`, `/.well-known/mcp/server-cards.json` *(vendor convention: Cloudflare, Mintlify)*
+3. `<endpoint>/server-card` for `/mcp`, `/api/mcp`, `/sse` *(the MCP extension's own recommendation)*
+4. `/.well-known/mcp.json` *(legacy)*
+
+An HTML response counts as absence, not a malformed card: SPA catch-alls answer every unknown path with the index shell.
+
+**When a server card is found:**
 
 | Condition | Points |
 | --- | --- |
-| Not found | **hard fail → 0** |
+| Wrong Content-Type (expected `application/json` or `application/mcp-server-card+json`) | −5 |
 | Invalid JSON | **→ 10** |
-| Wrong Content-Type | −5 |
-| Missing `name` | −10 |
-| Missing `description` | −5 |
-| No `tools` array, or empty | −15 |
-| No tool has a description | −10 |
-| Some tools missing descriptions | −5 |
-| No `resources` | −5 |
-| No protocol version | −5 |
+| Missing `$schema`, `name`, `version` or `description` | −15 each |
+| `name` not in reverse-DNS form | −5 |
+| No `remotes[]` | −15 |
+| Remote with an unrecognised transport (not `streamable-http` / `sse`) | −5 |
+| Remote missing a `url` | −10 |
+| No `supportedProtocolVersions` | −10 |
+| Only pre-2025-06 protocol revisions | −10 |
+| Unrecognised protocol version | −5 |
 | No CORS headers | −10 |
+| Declares `tools[]`, which the schema omits by design | warn only, 0 |
+
+**When only `/.well-known/mcp.json` is found**, the pre-3.7 rules are applied unchanged so the score is exactly what 3.6 produced (missing `name` −10, missing `description` −5, no `tools` −15, no tool descriptions −10 / −5, no `resources` −5, no version −5, no CORS −10, wrong Content-Type −5). The path itself is reported, not penalised.
 
 ### `seo-basics` — 7%
 
@@ -170,21 +202,33 @@ AI meta tags (`ai:summary`, `ai:content_type`, `ai:author`, `ai:api`, `ai:agent_
 | Twitter required incomplete (`twitter:card`, `twitter:title`, `twitter:description`) | −5 |
 | Twitter recommended incomplete (`twitter:image`) | −2 |
 
-### `openapi` — 6%
+### `api-discovery` — 6%
 
-`/.well-known/openapi.json`.
+Whether an agent can find, and read, a machine-readable API description. *Former id: `openapi`.*
+
+`/.well-known/openapi.json` is a folk convention — unregistered, and not prescribed by the OpenAPI specification, which recommends the file name `openapi.json` without a location. Discovery is probed in order of authority:
+
+1. `/.well-known/api-catalog` *(RFC 9727, IANA-registered)* → its `service-desc` links
+2. `Link: rel="service-desc"` on the homepage *(RFC 8631)*
+3. `<link rel="service-desc">` in the HTML head
+4. Conventional paths: `/.well-known/openapi.json`, `/openapi.json`, `/openapi.yaml`, `/.well-known/openapi.yaml`, `/api/openapi.json`, `/v1/openapi.json`, `/swagger.json`, `/api-docs`, `/asyncapi.json`, `/arazzo.json`
 
 | Condition | Points |
 | --- | --- |
-| Not found | **hard fail → 0** |
+| No description found by any mechanism | **hard fail → 0** |
 | Invalid JSON | **→ 10** |
-| Wrong Content-Type | −5 |
+| Wrong Content-Type on a JSON document | −5 |
 | No `openapi`/`swagger` version field | −20 |
 | Swagger 2.x instead of OpenAPI 3.x | −10 |
 | Missing `info.title` | −10 |
 | Missing `info.description` | −5 |
 | No `paths` documented | −15 |
 | No `servers` | −5 |
+| Found only by guessing a path (nothing links to it) | warn only, 0 |
+| `operationId` coverage below 100% | informational, 0 in 3.x |
+| API catalog present but empty, or entries missing `anchor` / `service-doc` | warn only, 0 |
+
+YAML descriptions are recognised and reported, but only surface-validated: ax-audit ships no YAML parser, and the finding says so rather than pretending otherwise.
 
 ### `tls-https` — 5%
 
@@ -270,23 +314,27 @@ Probes the homepage with `Accept: text/markdown` — the pattern served by Cloud
 | Tokens outside the RSL 1.0 vocabulary (incl. pre-1.0 draft tokens) | −5 |
 | Invalid `payment` type | −5 |
 
-### `agent-access` — Cloaking detection
+### `agent-access` — blocking and cloaking detection
 
-Probes the homepage with realistic UAs for the 8 core AI crawlers and compares status + visible text against the default-UA baseline. **Credit-ratio formula:**
+Probes the homepage with realistic user agents for the 10 core AI crawlers that actually issue requests (`Google-Extended` and `Applebot-Extended` are robots.txt control tokens, so probing with them tests nothing) and compares each response against the default-UA baseline. **Credit-ratio formula:**
 
 ```
-score = round(credit / 8 × 100)
+score = round(credit / 10 × 100)
 ```
+
+Responses are classified by *how* a request was turned away, because the remedies differ completely:
 
 | Outcome per crawler | Credit |
 | --- | --- |
-| Equivalent response | 1 |
-| Blocked, consistent with robots.txt `Disallow` (explicit or wildcard) | 1 |
-| 200 but < 50% of baseline visible text (baseline ≥ 200 chars) | 0.5 |
-| Blocked while robots.txt allows (or doesn't restrict) it | 0 |
+| Same page as a regular client | 1 |
+| Refused, consistent with an explicit robots.txt `Disallow` | 1 |
+| Priced access (`402` + `crawler-price`) or an RSL licence challenge | 1 |
+| JavaScript challenge (`cf-mitigated: challenge`, `x-vercel-mitigated`, AWS WAF's `202`), Web Bot Auth demand, rate limit, or a refusal from a bot-verifying CDN | 0.75, **inconclusive** |
+| Different page than the baseline: less text, or a changed title / h1 / JSON-LD block count | 0.5 |
+| Refused by a plain origin while robots.txt permits it | 0 |
 | Baseline request itself fails | **hard fail → 0** |
 
-Caveat: WAFs using Web Bot Auth / IP verification may pass the real crawler while rejecting this unverified probe — confirm against WAF logs before changing rules.
+The probe is unsigned and comes from the auditor's own network, so an edge that verifies crawlers by IP range or Web Bot Auth signature will reject it while admitting the genuine crawler. Those outcomes are reported as inconclusive with the exact header observed, never as "blocks AI crawlers". Confirm against WAF logs before changing a rule.
 
 ### `crawl-efficiency`
 

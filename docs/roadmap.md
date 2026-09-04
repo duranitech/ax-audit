@@ -259,7 +259,7 @@ Deferred (needs a headless browser or an LLM, out of scope for this package): re
 
 ## 5. Release plan
 
-### 3.7.0 — "Correct the map" (no score can go down)
+### 3.7.0 — "Correct the map" (no score can go down) — **shipped 2026-09-04**
 
 1. Shared infra: `robots-parser.ts`, `waf.ts`, fetcher `method`/`redirect`/`elapsedMs`, `CheckMeta.category`, `WELL_KNOWN_REGISTRY`.
 2. Crawler catalogue refresh (§4.1) with `CORE_AI_CRAWLERS_V3` frozen for scoring.
@@ -269,7 +269,9 @@ Deferred (needs a headless browser or an LLM, out of scope for this package): re
 6. `http-headers` relation broadening and hint fixes; `well-known-ai` hint rewrite + informational probes.
 7. `robots-txt`: `use=` field, case/space tolerance, tiered informational findings, `Content-Usage` and `Agentmap:` parsing (informational).
 8. Docs: checks.md, README table, CHANGELOG; remediation guides for every new anchor.
-9. Tests: ~60 new (fixtures for 1.0 and 0.3 cards, server cards, linkset, WAF headers, robots variants).
+9. Tests: 252 new (553 total).
+
+Delivered in eleven commits. Two things were found by dogfooding rather than by planning: `agent-access` was probing sites with a user agent containing `Google-Extended`, a robots.txt control token no request ever carries; and a speculative probe against a single-page application returned the index shell, which the check reported as a malformed document. Both are fixed and regression-tested.
 
 ### 3.8.0 — "New signals" (all weight 0)
 

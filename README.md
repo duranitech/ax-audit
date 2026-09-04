@@ -47,13 +47,13 @@ AI agents and LLMs are increasingly crawling, indexing, and interacting with web
 | Check | Weight | Check | Weight |
 |---|---|---|---|
 | LLMs.txt | 11% | Security.txt | 6% |
-| Robots.txt + [Content Signals](https://contentsignals.org) | 11% | Meta Tags (OG / Twitter / AI) | 6% |
-| HTML Rendering | 9% | OpenAPI | 6% |
+| Robots.txt + [Content Signals](https://contentsignals.org) + [AIPREF](https://datatracker.ietf.org/wg/aipref/documents/) | 11% | Meta Tags (OG / Twitter / AI) | 6% |
+| HTML Rendering | 9% | API Discovery ([RFC 9727](https://www.rfc-editor.org/rfc/rfc9727.html) / OpenAPI) | 6% |
 | Structured Data (JSON-LD) | 9% | TLS / HTTPS | 5% |
-| HTTP Headers | 9% | Sitemap | 4% |
+| HTTP Headers + discovery relations | 9% | Sitemap | 4% |
 | Agent Card ([A2A](https://a2a-protocol.org)) | 7% | AI Well-Known | 3% |
-| MCP | 7% | Content Negotiation (Markdown for Agents) | 0%* |
-| SEO Basics | 7% | [RSL License](https://rslstandard.org) · Agent Access (cloaking) · Crawl Efficiency | 0%* |
+| MCP Discovery (server cards) | 7% | Content Negotiation (Markdown for Agents) | 0%* |
+| SEO Basics | 7% | [RSL License](https://rslstandard.org) · Agent Access (blocking / cloaking) · Crawl Efficiency | 0%* |
 
 \* Informational in 3.x: reported in full, no effect on the score. Weighted in v4.0.
 
