@@ -23,6 +23,9 @@ import usagePolicy, { meta as usagePolicyMeta } from './usage-policy.js';
 import httpHygiene, { meta as httpHygieneMeta } from './http-hygiene.js';
 import aiCatalog, { meta as aiCatalogMeta } from './ai-catalog.js';
 import agentSkills, { meta as agentSkillsMeta } from './agent-skills.js';
+import webmcp, { meta as webmcpMeta } from './webmcp.js';
+import commerceDiscovery, { meta as commerceDiscoveryMeta } from './commerce-discovery.js';
+import authDiscovery, { meta as authDiscoveryMeta } from './auth-discovery.js';
 
 export const checks: CheckModule[] = [
   { run: llmsTxt, meta: llmsTxtMeta },
@@ -48,4 +51,7 @@ export const checks: CheckModule[] = [
   { run: httpHygiene, meta: httpHygieneMeta },
   { run: aiCatalog, meta: aiCatalogMeta },
   { run: agentSkills, meta: agentSkillsMeta },
+  { run: webmcp, meta: webmcpMeta },
+  { run: commerceDiscovery, meta: commerceDiscoveryMeta },
+  { run: authDiscovery, meta: authDiscoveryMeta },
 ];

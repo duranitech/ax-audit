@@ -607,6 +607,9 @@ export const CHECK_WEIGHTS: Record<string, number> = {
   'http-hygiene': 0,
   'ai-catalog': 0,
   'agent-skills': 0,
+  webmcp: 0,
+  'commerce-discovery': 0,
+  'auth-discovery': 0,
 };
 
 /**
@@ -637,6 +640,9 @@ export const CHECK_CATEGORIES: Record<string, CheckCategory> = {
   'http-hygiene': 'access',
   'ai-catalog': 'protocols',
   'agent-skills': 'protocols',
+  webmcp: 'protocols',
+  'commerce-discovery': 'protocols',
+  'auth-discovery': 'protocols',
 };
 
 export const GRADES: Grade[] = [
