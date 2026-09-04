@@ -5,7 +5,13 @@ export function clampScore(score: number): number {
   return Math.max(0, Math.min(100, score));
 }
 
-export function buildResult(meta: CheckMeta, score: number, findings: Finding[], start: number): CheckResult {
+export function buildResult(
+  meta: CheckMeta,
+  score: number,
+  findings: Finding[],
+  start: number,
+  options: { applicable?: boolean } = {},
+): CheckResult {
   return {
     id: meta.id,
     name: meta.name,
@@ -13,7 +19,18 @@ export function buildResult(meta: CheckMeta, score: number, findings: Finding[],
     score: clampScore(score),
     findings,
     duration: Math.round(performance.now() - start),
+    ...(meta.category !== undefined ? { category: meta.category } : {}),
+    ...(options.applicable === false ? { applicable: false } : {}),
   };
+}
+
+/**
+ * Result for a check whose subject the site does not have: no API to describe,
+ * no commerce surface, no MCP server. Reported as N/A and excluded from the
+ * score rather than counted as a failure.
+ */
+export function notApplicable(meta: CheckMeta, findings: Finding[], start: number): CheckResult {
+  return buildResult(meta, 0, findings, start, { applicable: false });
 }
 
 /**

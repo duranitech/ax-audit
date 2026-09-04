@@ -1,4 +1,5 @@
 import { getGrade } from '../scorer.js';
+import { CHECK_CATEGORIES } from '../constants.js';
 import type {
   AuditReport,
   BaselineDiff,
@@ -8,6 +9,7 @@ import type {
   Finding,
   FindingStatus,
   Grade,
+  CheckCategory,
 } from '../types.js';
 
 function gradeHslColor(grade: Grade): string {
@@ -80,16 +82,18 @@ function renderDeltaBadge(delta: number): string {
 }
 
 function renderCheck(check: CheckResult, checkDiff?: CheckDiff): string {
+  const notApplicable = check.applicable === false;
   const grade = getGrade(check.score);
-  const color = gradeHslColor(grade);
-  const diffHtml = checkDiff ? renderDeltaBadge(checkDiff.delta) : '';
+  const color = notApplicable ? 'var(--muted)' : gradeHslColor(grade);
+  const diffHtml = checkDiff && !notApplicable ? renderDeltaBadge(checkDiff.delta) : '';
+  const scoreLabel = notApplicable ? 'n/a' : `${check.score}/100`;
 
   return `
-    <details class="check" open>
+    <details class="check${notApplicable ? ' check-na' : ''}"${notApplicable ? '' : ' open'}>
       <summary>
         <div class="check-header">
           <span class="check-name">${escapeHtml(check.name)}</span>
-          <span class="check-score" style="color:${color}">${check.score}/100 ${diffHtml}</span>
+          <span class="check-score" style="color:${color}">${scoreLabel} ${diffHtml}</span>
         </div>
         <div class="check-desc">${escapeHtml(check.description)}</div>
       </summary>
@@ -97,6 +101,29 @@ function renderCheck(check: CheckResult, checkDiff?: CheckDiff): string {
         ${check.findings.map(renderFinding).join('')}
       </div>
     </details>`;
+}
+
+/** Group checks under category headings so a reader sees which area is weak. */
+function renderCheckGroups(results: CheckResult[], checkDiffs: Map<string, CheckDiff>): string {
+  const order: CheckCategory[] = ['content', 'discovery', 'access', 'policy', 'protocols'];
+  const heading: Record<CheckCategory, string> = {
+    content: 'Content',
+    discovery: 'Discovery',
+    access: 'Access',
+    policy: 'Policy',
+    protocols: 'Protocols',
+  };
+  const categoryOf = (c: CheckResult): CheckCategory => c.category ?? CHECK_CATEGORIES[c.id] ?? 'discovery';
+
+  return order
+    .map((category) => {
+      const checks = results.filter((c) => categoryOf(c) === category);
+      if (checks.length === 0) return '';
+      return `
+      <h2 class="category">${heading[category]}</h2>
+      ${checks.map((c) => renderCheck(c, checkDiffs.get(c.id))).join('')}`;
+    })
+    .join('');
 }
 
 function renderDiffSummary(diff: BaselineDiff): string {
@@ -152,7 +179,7 @@ function renderSingleReport(report: AuditReport, diff?: BaselineDiff): string {
       </div>
       ${diff ? renderDiffSummary(diff) : ''}
       <div class="checks">
-        ${report.results.map((c) => renderCheck(c, checkDiffs.get(c.id))).join('')}
+        ${renderCheckGroups(report.results, checkDiffs)}
       </div>
     </div>`;
 }
@@ -315,6 +342,8 @@ h1 {
   width: calc(100% - 1.5rem);
   justify-content: space-between;
 }
+.category { font-size: 0.8rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 2rem 0 0.75rem; }
+.check-na { opacity: 0.62; }
 .check-name { font-weight: 600; }
 .check-score { font-weight: 700; font-size: 0.9rem; }
 .check-desc { color: var(--text-secondary); font-size: 0.8rem; margin-top: 0.15rem; padding-left: 1.15rem; }
@@ -430,13 +459,26 @@ ${body}
 </html>`;
 }
 
+/**
+ * Render a single audit report as a self-contained HTML document.
+ *
+ * Separated from `reportHtml` so callers can embed the report, write it to a
+ * file, or assert on it in tests, matching `renderMarkdown`.
+ */
+export function renderHtml(report: AuditReport, diff?: BaselineDiff): string {
+  return htmlShell(`AX Audit — ${report.url}`, renderSingleReport(report, diff));
+}
+
+/** Render a batch audit as a self-contained HTML document. */
+export function renderBatchHtml(batch: BatchAuditReport): string {
+  const body = renderBatchSummary(batch) + batch.reports.map((r) => renderSingleReport(r)).join('');
+  return htmlShell(`AX Audit — Batch Report (${batch.summary.total} URLs)`, body);
+}
+
 export function reportHtml(report: AuditReport, diff?: BaselineDiff): void {
-  const html = htmlShell(`AX Audit — ${report.url}`, renderSingleReport(report, diff));
-  console.log(html);
+  console.log(renderHtml(report, diff));
 }
 
 export function reportBatchHtml(batch: BatchAuditReport): void {
-  const body = renderBatchSummary(batch) + batch.reports.map((r) => renderSingleReport(r)).join('');
-  const html = htmlShell(`AX Audit — Batch Report (${batch.summary.total} URLs)`, body);
-  console.log(html);
+  console.log(renderBatchHtml(batch));
 }

@@ -1,6 +1,31 @@
 import chalk from 'chalk';
 import { getGrade } from '../scorer.js';
-import type { AuditReport, BaselineDiff, BatchAuditReport, CheckDiff, FindingStatus, Grade } from '../types.js';
+import { CHECK_CATEGORIES } from '../constants.js';
+import type {
+  AuditReport,
+  BaselineDiff,
+  BatchAuditReport,
+  CheckCategory,
+  CheckDiff,
+  CheckResult,
+  FindingStatus,
+  Grade,
+} from '../types.js';
+
+/** Display order and headings for grouped output. */
+const CATEGORY_ORDER: CheckCategory[] = ['content', 'discovery', 'access', 'policy', 'protocols'];
+
+const CATEGORY_HEADING: Record<CheckCategory, string> = {
+  content: 'Content — is there substance an agent can read?',
+  discovery: 'Discovery — can an agent find your machine-readable files?',
+  access: 'Access — can an agent actually retrieve them?',
+  policy: 'Policy — what usage rights do you declare?',
+  protocols: 'Protocols — what can an agent call?',
+};
+
+function categoryOf(check: CheckResult): CheckCategory {
+  return check.category ?? CHECK_CATEGORIES[check.id] ?? 'discovery';
+}
 
 const STATUS_ICONS: Record<FindingStatus, string> = {
   pass: chalk.green('  PASS '),
@@ -55,9 +80,30 @@ export function reportTerminal(report: AuditReport, diff?: BaselineDiff): void {
     }
   }
 
+  // Group by category so a reader sees which *area* is weak, not a flat list of
+  // twenty scores. Categories with no checks in this run are skipped.
+  const byCategory = new Map<CheckCategory, CheckResult[]>();
   for (const check of report.results) {
+    const category = categoryOf(check);
+    byCategory.set(category, [...(byCategory.get(category) ?? []), check]);
+  }
+
+  const ordered = CATEGORY_ORDER.filter((c) => byCategory.has(c)).flatMap((category) => [
+    { heading: CATEGORY_HEADING[category] },
+    ...byCategory.get(category)!.map((check) => ({ check })),
+  ]);
+
+  for (const entry of ordered) {
+    if ('heading' in entry) {
+      console.log(chalk.dim(`  ── ${entry.heading}`));
+      console.log();
+      continue;
+    }
+    const check = entry.check;
     const cd = checkDiffs.get(check.id);
-    const header = chalk.bold(`  ${check.name}`) + chalk.dim(` (${check.score}/100)`);
+    const header =
+      chalk.bold(`  ${check.name}`) +
+      (check.applicable === false ? chalk.dim(' (n/a)') : chalk.dim(` (${check.score}/100)`));
     console.log(cd ? header + formatDelta(cd.delta) : header);
 
     for (const finding of check.findings) {

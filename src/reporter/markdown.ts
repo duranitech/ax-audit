@@ -1,5 +1,32 @@
 import { getGrade } from '../scorer.js';
-import type { AuditReport, BaselineDiff, BatchAuditReport, CheckResult, FindingStatus } from '../types.js';
+import { CHECK_CATEGORIES } from '../constants.js';
+import type {
+  AuditReport,
+  BaselineDiff,
+  BatchAuditReport,
+  CheckCategory,
+  CheckResult,
+  FindingStatus,
+} from '../types.js';
+
+const CATEGORY_ORDER: CheckCategory[] = ['content', 'discovery', 'access', 'policy', 'protocols'];
+
+const CATEGORY_LABEL: Record<CheckCategory, string> = {
+  content: 'Content',
+  discovery: 'Discovery',
+  access: 'Access',
+  policy: 'Policy',
+  protocols: 'Protocols',
+};
+
+function categoryOf(check: CheckResult): CheckCategory {
+  return check.category ?? CHECK_CATEGORIES[check.id] ?? 'discovery';
+}
+
+/** Score cell text: N/A checks state so rather than showing a misleading 0. */
+function scoreCell(check: CheckResult, deltaValue?: number): string {
+  return check.applicable === false ? 'n/a' : `${check.score}/100${delta(deltaValue)}`;
+}
 
 const STATUS_EMOJI: Record<FindingStatus, string> = {
   pass: '✅',
@@ -14,7 +41,7 @@ function delta(value: number | undefined): string {
 
 function checkSection(check: CheckResult, deltaValue?: number): string {
   const lines: string[] = [];
-  lines.push(`### ${check.name} — ${check.score}/100${delta(deltaValue)}`);
+  lines.push(`### ${check.name} — ${scoreCell(check, deltaValue)}`);
   lines.push('');
   for (const f of check.findings) {
     let line = `- ${STATUS_EMOJI[f.status]} ${f.message}`;
@@ -39,13 +66,25 @@ export function renderMarkdown(report: AuditReport, diff?: BaselineDiff): string
   out.push(`<sub>${report.timestamp} · ${report.duration}ms</sub>`);
   out.push('');
 
-  // Summary table.
-  out.push('| Check | Score |');
-  out.push('| --- | --- |');
-  for (const c of report.results) {
-    out.push(`| ${c.name} | ${c.score}/100${delta(deltaByCheck.get(c.id))} |`);
+  // Summary table, grouped by category so a reader sees which area is weak.
+  out.push('| Area | Check | Score |');
+  out.push('| --- | --- | --- |');
+  for (const category of CATEGORY_ORDER) {
+    const checks = report.results.filter((c) => categoryOf(c) === category);
+    for (const [i, c] of checks.entries()) {
+      const area = i === 0 ? `**${CATEGORY_LABEL[category]}**` : '';
+      out.push(`| ${area} | ${c.name} | ${scoreCell(c, deltaByCheck.get(c.id))} |`);
+    }
   }
   out.push('');
+
+  const notApplicable = report.results.filter((c) => c.applicable === false);
+  if (notApplicable.length > 0) {
+    out.push(
+      `<sub>${notApplicable.length} check(s) marked n/a — the site has no such surface, so they are excluded from the score rather than counted as failures.</sub>`,
+    );
+    out.push('');
+  }
 
   for (const c of report.results) {
     out.push(checkSection(c, deltaByCheck.get(c.id)));
