@@ -1,5 +1,5 @@
 import { guideUrl } from '../guide-urls.js';
-import { extractVisibleText } from './html-utils.js';
+import { extractVisibleText, findJsonLdBlocks } from './html-utils.js';
 import type { CheckContext, CheckResult, CheckMeta, Finding } from '../types.js';
 import { buildResult } from './utils.js';
 
@@ -20,8 +20,7 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
     return buildResult(meta, 0, findings, start);
   }
 
-  const jsonLdPattern = /<script\s+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
-  const blocks = [...html.matchAll(jsonLdPattern)];
+  const blocks = findJsonLdBlocks(html);
 
   if (blocks.length === 0) {
     findings.push({
@@ -37,7 +36,7 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
 
   const parsed: Record<string, unknown>[] = [];
   for (const block of blocks) {
-    const raw = unescapeHtml(block[1]);
+    const raw = unescapeHtml(block);
     try {
       parsed.push(JSON.parse(raw));
     } catch {

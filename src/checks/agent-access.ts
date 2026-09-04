@@ -2,7 +2,7 @@ import { PROBEABLE_CORE_CRAWLERS, crawlerInfo } from '../constants.js';
 import { guideUrl } from '../guide-urls.js';
 import type { CheckContext, CheckResult, CheckMeta, Finding } from '../types.js';
 import { buildResult } from './utils.js';
-import { extractVisibleText } from './html-utils.js';
+import { extractVisibleText, findJsonLdBlocks } from './html-utils.js';
 import { parseUserAgents, intentBlocked } from './robots-parser.js';
 import { classifyResponse, INCONCLUSIVE_CAVEAT, type ResponseClass } from './waf.js';
 
@@ -91,7 +91,7 @@ function shapeOf(html: string): PageShape {
     textLength: extractVisibleText(html).length,
     title: title ? extractVisibleText(title[1]) : null,
     h1: h1 ? extractVisibleText(h1[1]) : null,
-    jsonLdBlocks: (html.match(/<script\b[^>]*type\s*=\s*["']application\/ld\+json["']/gi) ?? []).length,
+    jsonLdBlocks: findJsonLdBlocks(html).length,
   };
 }
 

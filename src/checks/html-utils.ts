@@ -86,6 +86,25 @@ export function extractVisibleText(html: string): string {
     .trim();
 }
 
+/**
+ * Extract the contents of every `<script type="application/ld+json">` block.
+ *
+ * Attribute order matters here, and it is easy to get wrong: a pattern anchored
+ * on `<script type=...` misses `<script id="org-json-ld" type="application/ld+json">`,
+ * which is how several frameworks emit it. That mistake reads as "no structured
+ * data found" on a site whose markup is perfectly good, so the matcher tolerates
+ * any attributes before `type`.
+ */
+export function findJsonLdBlocks(html: string): string[] {
+  const re = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+  const blocks: string[] = [];
+  for (const m of html.matchAll(re)) {
+    const type = (getAttribute(m[1], 'type') ?? '').toLowerCase();
+    if (type.includes('application/ld+json')) blocks.push(m[2]);
+  }
+  return blocks;
+}
+
 /** Count `<script>` tags (excluding `type="application/ld+json"` data blocks). */
 export function countExecutableScripts(html: string): number {
   const re = /<script\b([^>]*)>/gi;

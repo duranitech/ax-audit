@@ -2,6 +2,7 @@ import { guideUrl } from '../guide-urls.js';
 import type { CheckContext, CheckResult, CheckMeta, Finding } from '../types.js';
 import { buildResult, isHtmlDocument, notApplicable } from './utils.js';
 import { standingNote } from './well-known.js';
+import { findJsonLdBlocks } from './html-utils.js';
 import { forcedBy, profileFrom } from './surface.js';
 
 /**
@@ -53,14 +54,12 @@ export function hasCommerceSignals(html: string): { found: boolean; evidence: st
   const evidence: string[] = [];
   let weakOffer = false;
 
-  for (const block of html.matchAll(
-    /<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi,
-  )) {
-    if (/"@type"\s*:\s*"(Product|AggregateOffer|OnlineStore|OnlineMarketplace|ItemList)"/i.test(block[1])) {
+  for (const block of findJsonLdBlocks(html)) {
+    if (/"@type"\s*:\s*"(Product|AggregateOffer|OnlineStore|OnlineMarketplace|ItemList)"/i.test(block)) {
       evidence.push('Product or storefront structured data');
       break;
     }
-    if (/"@type"\s*:\s*"Offer"/i.test(block[1])) weakOffer = true;
+    if (/"@type"\s*:\s*"Offer"/i.test(block)) weakOffer = true;
   }
 
   const hasCart = /<a\b[^>]+href\s*=\s*["'][^"']*\/(cart|checkout|basket|bag)\b/i.test(html);
