@@ -198,12 +198,46 @@ describe('robots-txt', () => {
     });
 
     it('should warn on malformed signal segments', async () => {
-      const result = await audit(['User-agent: *', 'Content-Signal: search=maybe, ai-train', 'Allow: /']);
+      const result = await audit(['User-agent: *', 'Content-Signal: ai-train', 'Allow: /']);
       const finding = result.findings.find(f => f.message.includes('Malformed content signal'));
       assert.ok(finding);
       assert.equal(finding.status, 'warn');
-      assert.ok(finding.detail.includes('search=maybe'));
       assert.ok(finding.detail.includes('ai-train'));
+    });
+
+    it('should separate a bad value on a known signal from a malformed segment', async () => {
+      const result = await audit(['User-agent: *', 'Content-Signal: search=maybe, ai-train', 'Allow: /']);
+      const badValue = result.findings.find(f => f.message.includes('out-of-vocabulary value'));
+      assert.ok(badValue, 'search=maybe is a known signal with an unusable value');
+      assert.ok(badValue.detail.includes('search=maybe'));
+      assert.ok(!badValue.detail.includes('ai-train'));
+
+      const malformed = result.findings.find(f => f.message.includes('Malformed content signal'));
+      assert.ok(malformed, 'ai-train has no value at all');
+      assert.ok(malformed.detail.includes('ai-train'));
+    });
+
+    it('should accept the use= field and reject an unknown use value', async () => {
+      const ok = await audit(['User-agent: *', 'Content-signal: search=yes, ai-train=no, use=reference', 'Allow: /']);
+      const declared = ok.findings.find(f => f.message.includes('Content signals declared'));
+      assert.ok(declared);
+      assert.ok(declared.message.includes('use=reference'));
+
+      const bad = await audit(['User-agent: *', 'Content-Signal: use=partial', 'Allow: /']);
+      const finding = bad.findings.find(f => f.message.includes('out-of-vocabulary value'));
+      assert.ok(finding);
+      assert.ok(finding.detail.includes('use=partial'));
+    });
+
+    it('should note when signals come from a Cloudflare-managed block', async () => {
+      const result = await audit([
+        '# BEGIN Cloudflare Managed content',
+        'User-agent: *',
+        'Content-signal: search=yes, ai-train=no',
+        'Allow: /',
+        '# END Cloudflare Managed Content',
+      ]);
+      assert.ok(result.findings.some(f => f.message.includes('Cloudflare-managed robots.txt block')));
     });
 
     it('should warn on unknown signal names', async () => {
@@ -254,6 +288,81 @@ describe('robots-txt', () => {
       const blocked = result.findings.find(f => f.message.includes('explicitly blocked'));
       assert.ok(blocked);
       assert.equal(blocked.detail, 'ClaudeBot');
+    });
+  });
+
+  describe('AI usage preferences (IETF AIPREF Content-Usage)', () => {
+
+    const FULL_CONFIG = [
+      'User-agent: GPTBot', 'Allow: /', '',
+      'User-agent: ClaudeBot', 'Allow: /', '',
+      'User-agent: ChatGPT-User', 'Allow: /', '',
+      'User-agent: Claude-SearchBot', 'Allow: /', '',
+      'User-agent: Google-Extended', 'Allow: /', '',
+      'User-agent: PerplexityBot', 'Allow: /', '',
+      'User-agent: OAI-SearchBot', 'Allow: /', '',
+      'User-agent: CCBot', 'Allow: /', '',
+      'Sitemap: https://example.com/sitemap.xml',
+    ];
+
+    async function audit(bodyLines) {
+      const ctx = mockContext({ '/robots.txt': mockResponse({ body: bodyLines.join('\n') }) });
+      return check(ctx);
+    }
+    it('should stay silent when no Content-Usage directive exists', async () => {
+      const result = await audit(FULL_CONFIG);
+      assert.ok(
+        !result.findings.some(f => f.message.includes('Content-Usage') || f.message.includes('usage preferences')),
+        'an absent pre-last-call directive must not produce noise',
+      );
+    });
+
+    it('should report declared usage preferences', async () => {
+      const result = await audit(['User-agent: *', 'Content-Usage: train-ai=n, search=y', 'Allow: /']);
+      const finding = result.findings.find(f => f.message.includes('AI usage preferences declared'));
+      assert.ok(finding);
+      assert.equal(finding.status, 'pass');
+      assert.ok(finding.message.includes('train-ai=n'));
+      assert.ok(finding.message.includes('search=y'));
+    });
+
+    it('should report the path scope of a path-limited rule', async () => {
+      const result = await audit(['User-agent: *', 'Content-Usage: /blog/ train-ai=y', 'Allow: /']);
+      const finding = result.findings.find(f => f.message.includes('AI usage preferences declared'));
+      assert.ok(finding.message.includes('for /blog/'));
+    });
+
+    it('should flag Content Signals vocabulary used under Content-Usage', async () => {
+      const result = await audit(['User-agent: *', 'Content-Usage: ai-train=no', 'Allow: /']);
+      const finding = result.findings.find(f => f.message.includes('Content Signals vocabulary'));
+      assert.ok(finding, 'ai-train=no under Content-Usage is a silent no-op');
+      assert.equal(finding.status, 'warn');
+      assert.ok(finding.detail.includes('ai-train=no'));
+      assert.ok(finding.hint.includes('train-ai=n'));
+    });
+
+    it('should flag values outside y/n', async () => {
+      const result = await audit(['User-agent: *', 'Content-Usage: train-ai=yes', 'Allow: /']);
+      const finding = result.findings.find(f => f.message.includes('outside the AIPREF vocabulary'));
+      assert.ok(finding);
+      assert.ok(finding.detail.includes('train-ai=yes'));
+    });
+
+    it('should flag unknown extension tokens', async () => {
+      const result = await audit(['User-agent: *', 'Content-Usage: train-ai=n, remix=y', 'Allow: /']);
+      assert.ok(result.findings.some(f => f.message.includes('Unknown Content-Usage token')));
+      assert.ok(result.findings.some(f => f.message.includes('AI usage preferences declared')));
+    });
+
+    it('should warn when a rule sits outside a User-agent group', async () => {
+      const result = await audit(['Content-Usage: train-ai=n', 'User-agent: *', 'Allow: /']);
+      assert.ok(result.findings.some(f => f.message.includes('Content-Usage rule outside a User-agent group')));
+    });
+
+    it('should never change the robots-txt score', async () => {
+      const withUsage = await audit([...FULL_CONFIG, 'User-agent: GPTBot', 'Content-Usage: train-ai=n']);
+      const without = await audit(FULL_CONFIG);
+      assert.equal(withUsage.score, without.score);
     });
   });
 });

@@ -161,6 +161,30 @@ export const GRADES: Grade[] = [
 export const CONTENT_SIGNALS: string[] = ['search', 'ai-input', 'ai-train'];
 
 /**
+ * Values of the optional fourth Content Signals field `use`, introduced by
+ * Cloudflare on 2026-07-01 and now emitted by its managed robots.txt:
+ * `immediate` (interact, store nothing), `reference` (index, excerpt, link
+ * back — the stated default) and `full` (summarize and reproduce).
+ * https://blog.cloudflare.com/content-independence-day-ai-options/
+ */
+export const CONTENT_SIGNAL_USE_VALUES: string[] = ['immediate', 'reference', 'full'];
+
+/**
+ * IETF AIPREF vocabulary (draft-ietf-aipref-vocab-07, 2026-08-19). Two
+ * categories only: `train-ai` (modifying model parameters) and `search`
+ * (retrieval that links back to the original). Values are `y` / `n`; an absent
+ * token means "unknown", never "allowed".
+ *
+ * The drafts are pre-working-group-last-call and carry the "DO NOT REFLECT
+ * CONSENSUS" boilerplate, so ax-audit reports these directives without ever
+ * requiring them. Note the token order is inverted against Content Signals
+ * (`train-ai` here, `ai-train` there).
+ * https://datatracker.ietf.org/wg/aipref/documents/
+ */
+export const AIPREF_TOKENS: string[] = ['train-ai', 'search'];
+export const AIPREF_VALUES: string[] = ['y', 'n'];
+
+/**
  * Really Simple Licensing 1.0 (https://rslstandard.org/rsl): machine-readable licensing
  * terms for content, discovered via robots.txt `License:`, HTTP `Link: rel="license"`,
  * or `<link rel="license" type="application/rsl+xml">`.

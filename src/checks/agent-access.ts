@@ -3,7 +3,7 @@ import { guideUrl } from '../guide-urls.js';
 import type { CheckContext, CheckResult, CheckMeta, Finding } from '../types.js';
 import { buildResult } from './utils.js';
 import { extractVisibleText } from './html-utils.js';
-import { parseUserAgents, type BotEntry } from './robots-txt.js';
+import { parseUserAgents, intentBlocked } from './robots-parser.js';
 
 export const meta: CheckMeta = {
   id: 'agent-access',
@@ -28,16 +28,8 @@ export function crawlerUserAgent(token: string): string {
   return `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ${token}/1.0)`;
 }
 
-/**
- * Whether robots.txt expresses the intent to block this crawler: an explicit
- * full Disallow for it, or a full wildcard Disallow with no explicit entry.
- */
-export function intentBlocked(entries: BotEntry[], crawler: string): boolean {
-  const explicit = entries.find((e) => e.name.toLowerCase() === crawler.toLowerCase());
-  if (explicit) return explicit.disallowed;
-  const wildcard = entries.find((e) => e.name === '*');
-  return wildcard?.disallowed ?? false;
-}
+// `intentBlocked` moved to robots-parser.ts in 3.7; re-exported for compatibility.
+export { intentBlocked } from './robots-parser.js';
 
 export default async function check(ctx: CheckContext): Promise<CheckResult> {
   const start = performance.now();

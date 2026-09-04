@@ -1,7 +1,14 @@
-import { ALL_AI_CRAWLERS, CONTENT_SIGNALS, CORE_AI_CRAWLERS } from '../constants.js';
+import { ALL_AI_CRAWLERS, CONTENT_SIGNALS, CONTENT_SIGNAL_USE_VALUES, CORE_AI_CRAWLERS } from '../constants.js';
 import { guideUrl } from '../guide-urls.js';
 import type { CheckContext, CheckResult, CheckMeta, Finding } from '../types.js';
 import { buildResult } from './utils.js';
+import {
+  parseRobotsTxt,
+  parseContentSignalValue,
+  parseContentUsageValue,
+  toBotEntries,
+  type RobotsTxt,
+} from './robots-parser.js';
 
 export const meta: CheckMeta = {
   id: 'robots-txt',
@@ -10,12 +17,10 @@ export const meta: CheckMeta = {
   weight: 11,
 };
 
-export interface BotEntry {
-  name: string;
-  disallowed: boolean;
-  hasRestrictions: boolean;
-  hasAllow: boolean;
-}
+// Re-exported for checks and consumers that were written against the pre-3.7
+// location of the parser. The implementation now lives in `robots-parser.ts`.
+export { parseUserAgents, intentBlocked } from './robots-parser.js';
+export type { BotEntry } from './robots-parser.js';
 
 export default async function check(ctx: CheckContext): Promise<CheckResult> {
   const start = performance.now();
@@ -36,7 +41,8 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
 
   findings.push({ status: 'pass', message: '/robots.txt exists' });
   const text = res.body;
-  const configuredBots = parseUserAgents(text);
+  const robots = parseRobotsTxt(text);
+  const configuredBots = toBotEntries(robots);
   const wildcardEntry = configuredBots.find((b) => b.name === '*');
 
   const coreConfigured = CORE_AI_CRAWLERS.filter((bot) =>
@@ -117,7 +123,7 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
     });
   }
 
-  if (/^Sitemap:/im.test(text)) {
+  if (robots.sitemaps.length > 0) {
     findings.push({ status: 'pass', message: 'Sitemap directive present' });
   } else {
     findings.push({
@@ -129,8 +135,9 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
     score -= 5;
   }
 
-  // Content Signals Policy (contentsignals.org) — informational in 3.x: findings only, no score impact.
-  addContentSignalFindings(text, findings);
+  // Usage-preference directives — informational in 3.x: findings only, no score impact.
+  addContentSignalFindings(robots, findings);
+  addContentUsageFindings(robots, findings);
 
   const totalConfigured = ALL_AI_CRAWLERS.filter((bot) =>
     configuredBots.some((b) => b.name.toLowerCase() === bot.toLowerCase()),
@@ -149,152 +156,56 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
   return buildResult(meta, score, findings, start);
 }
 
-export function parseUserAgents(text: string): BotEntry[] {
-  const entries: BotEntry[] = [];
-  let currentGroup: BotEntry[] = [];
-  let inDirectives = false;
-
-  for (const line of text.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-
-    const uaMatch = trimmed.match(/^User-agent:\s*(.+)/i);
-    if (uaMatch) {
-      if (inDirectives) {
-        currentGroup = [];
-        inDirectives = false;
-      }
-      const entry: BotEntry = { name: uaMatch[1].trim(), disallowed: false, hasRestrictions: false, hasAllow: false };
-      currentGroup.push(entry);
-      entries.push(entry);
-    } else if (/^Disallow:\s*\/\s*$/i.test(trimmed)) {
-      inDirectives = true;
-      for (const entry of currentGroup) {
-        entry.disallowed = true;
-        entry.hasRestrictions = true;
-      }
-    } else if (/^Disallow:\s*\/.+/i.test(trimmed)) {
-      inDirectives = true;
-      for (const entry of currentGroup) {
-        entry.hasRestrictions = true;
-      }
-    } else if (/^Allow:/i.test(trimmed)) {
-      inDirectives = true;
-      for (const entry of currentGroup) {
-        entry.hasAllow = true;
-      }
-    } else if (/^(Sitemap|Crawl-delay|Host|Content-Signal):/i.test(trimmed)) {
-      inDirectives = true;
-    }
-  }
-
-  return entries;
-}
-
 /* ── Content Signals Policy (https://contentsignals.org) ───────────────── */
 
-interface ContentSignalDecl {
-  /** User-agent names of the group this declaration belongs to (empty = outside any group). */
-  userAgents: string[];
-  /** Raw directive value, e.g. "search=yes, ai-train=no". */
-  raw: string;
-}
-
 /**
- * Extract `Content-Signal:` declarations and the User-agent group each belongs to.
- * Mirrors the grouping rules of `parseUserAgents`: consecutive User-agent lines form
- * one group; any directive line closes the group.
+ * Report `Content-Signal:` declarations, the machine-readable statement of how
+ * content may be used *after* access. Cloudflare serves these by default on its
+ * managed robots.txt, so they show up on a large share of the web.
+ *
+ * Every finding here is informational in 3.x: no major AI operator has publicly
+ * committed to honoring the policy (Google has said its crawlers ignore it), so
+ * an absent directive must never cost a site points.
  */
-export function parseContentSignalDecls(text: string): ContentSignalDecl[] {
-  const decls: ContentSignalDecl[] = [];
-  let currentUAs: string[] = [];
-  let inDirectives = false;
+function addContentSignalFindings(robots: RobotsTxt, findings: Finding[]): void {
+  const declared = robots.groups.flatMap((g) => g.contentSignals.map((raw) => ({ group: g.userAgents, raw })));
 
-  for (const line of text.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-
-    const uaMatch = trimmed.match(/^User-agent:\s*(.+)/i);
-    if (uaMatch) {
-      if (inDirectives) {
-        currentUAs = [];
-        inDirectives = false;
-      }
-      currentUAs.push(uaMatch[1].trim());
-      continue;
-    }
-
-    const csMatch = trimmed.match(/^Content-Signal:\s*(.+)/i);
-    if (csMatch) {
-      inDirectives = true;
-      decls.push({ userAgents: [...currentUAs], raw: csMatch[1].trim() });
-      continue;
-    }
-
-    if (/^(Disallow|Allow|Sitemap|Crawl-delay|Host):/i.test(trimmed)) {
-      inDirectives = true;
-    }
+  for (const raw of robots.orphanContentSignals) {
+    findings.push({
+      status: 'warn',
+      message: 'Content-Signal directive outside a User-agent group',
+      detail: `Content-Signal: ${raw}`,
+      hint: 'Place Content-Signal inside a User-agent group, after the User-agent line it applies to.',
+      learnMoreUrl: guideUrl(meta.id, 'invalid-content-signal'),
+    });
   }
 
-  return decls;
-}
-
-interface ParsedSignals {
-  valid: string[]; // normalized "name=yes|no" pairs with known names
-  malformed: string[]; // segments not matching name=yes|no
-  unknown: string[]; // well-formed pairs with names outside the spec vocabulary
-}
-
-function parseSignalPairs(raw: string): ParsedSignals {
-  const result: ParsedSignals = { valid: [], malformed: [], unknown: [] };
-  for (const segment of raw.split(',')) {
-    const s = segment.trim();
-    if (!s) continue;
-    const m = s.match(/^([a-z][a-z-]*)\s*=\s*(yes|no)$/i);
-    if (!m) {
-      result.malformed.push(s);
-      continue;
-    }
-    const name = m[1].toLowerCase();
-    if (!CONTENT_SIGNALS.includes(name)) {
-      result.unknown.push(s);
-      continue;
-    }
-    result.valid.push(`${name}=${m[2].toLowerCase()}`);
-  }
-  return result;
-}
-
-function addContentSignalFindings(text: string, findings: Finding[]): void {
-  const decls = parseContentSignalDecls(text);
-
-  if (decls.length === 0) {
+  if (declared.length === 0) {
+    if (robots.orphanContentSignals.length > 0) return;
     findings.push({
       status: 'warn',
       message: 'No Content-Signal directive found (optional)',
       hint:
         'Declare how crawlers may use your content after access with the Content Signals Policy, ' +
         'e.g.: Content-Signal: search=yes, ai-train=no. Known signals: ' +
-        `${CONTENT_SIGNALS.join(', ')}. Generate yours at contentsignals.org.`,
+        `${CONTENT_SIGNALS.join(', ')}, plus the optional use=${CONTENT_SIGNAL_USE_VALUES.join('|')}. ` +
+        'Generate yours at contentsignals.org.',
       learnMoreUrl: guideUrl(meta.id, 'missing-content-signals'),
     });
     return;
   }
 
-  for (const decl of decls) {
-    const group = decl.userAgents.length > 0 ? decl.userAgents.join(', ') : null;
-    const { valid, malformed, unknown } = parseSignalPairs(decl.raw);
+  if (robots.cloudflareManaged) {
+    findings.push({
+      status: 'pass',
+      message: 'Content signals served from a Cloudflare-managed robots.txt block',
+      detail: 'Edit these in the Cloudflare dashboard (AI Crawl Control), not in your origin robots.txt.',
+    });
+  }
 
-    if (group === null) {
-      findings.push({
-        status: 'warn',
-        message: 'Content-Signal directive outside a User-agent group',
-        detail: `Content-Signal: ${decl.raw}`,
-        hint: 'Place Content-Signal inside a User-agent group, after the User-agent line it applies to.',
-        learnMoreUrl: guideUrl(meta.id, 'invalid-content-signal'),
-      });
-      continue;
-    }
+  for (const decl of declared) {
+    const group = decl.group.join(', ');
+    const { valid, malformed, unknown, invalidValue } = parseContentSignalValue(decl.raw);
 
     if (valid.length > 0) {
       findings.push({
@@ -311,13 +222,103 @@ function addContentSignalFindings(text: string, findings: Finding[]): void {
         learnMoreUrl: guideUrl(meta.id, 'invalid-content-signal'),
       });
     }
+    if (invalidValue.length > 0) {
+      findings.push({
+        status: 'warn',
+        message: `Content signal(s) with an out-of-vocabulary value for User-agent: ${group}`,
+        detail: invalidValue.join(', '),
+        hint:
+          `${CONTENT_SIGNALS.join(', ')} take yes or no. ` +
+          `use takes ${CONTENT_SIGNAL_USE_VALUES.join(', ')} (default: reference).`,
+        learnMoreUrl: guideUrl(meta.id, 'invalid-content-signal'),
+      });
+    }
     if (unknown.length > 0) {
       findings.push({
         status: 'warn',
         message: `Unknown content signal name(s) for User-agent: ${group}`,
         detail: unknown.join(', '),
-        hint: `The Content Signals Policy defines: ${CONTENT_SIGNALS.join(', ')}. Other names are ignored by crawlers.`,
+        hint: `The Content Signals Policy defines: ${CONTENT_SIGNALS.join(', ')}, use. Other names are ignored by crawlers.`,
         learnMoreUrl: guideUrl(meta.id, 'unknown-content-signal'),
+      });
+    }
+  }
+}
+
+/* ── IETF AIPREF Content-Usage (draft-ietf-aipref-attach-05) ────────────── */
+
+/**
+ * Report `Content-Usage:` rules. AIPREF is the IETF's answer to the same
+ * question Content Signals asks, and its drafts are still pre-last-call, so
+ * these findings are informational and an absent directive is never penalised.
+ *
+ * The one thing worth flagging loudly is a vocabulary mix-up: AIPREF spells the
+ * training token `train-ai` with `y`/`n` values, while Content Signals and RSL
+ * spell it `ai-train` with `yes`/`no`. A `Content-Usage: ai-train=no` line looks
+ * right and does nothing.
+ */
+function addContentUsageFindings(robots: RobotsTxt, findings: Finding[]): void {
+  const declared = robots.groups.flatMap((g) => g.contentUsage.map((raw) => ({ group: g.userAgents, raw })));
+  const orphans = robots.orphanContentUsage;
+  if (declared.length === 0 && orphans.length === 0) return;
+
+  for (const raw of orphans) {
+    findings.push({
+      status: 'warn',
+      message: 'Content-Usage rule outside a User-agent group',
+      detail: `Content-Usage: ${raw}`,
+      hint: 'AIPREF scopes Content-Usage rules to the User-agent group they appear in. Place the rule after a User-agent line.',
+      learnMoreUrl: guideUrl(meta.id, 'invalid-content-usage'),
+    });
+  }
+
+  for (const decl of declared) {
+    const group = decl.group.join(', ');
+    const scope = (path: string | null): string => (path === null ? '' : ` for ${path}`);
+    const { path, valid, unknown, invalidValue, malformed, crossVocabulary } = parseContentUsageValue(decl.raw);
+
+    if (valid.length > 0) {
+      findings.push({
+        status: 'pass',
+        message: `AI usage preferences declared for User-agent: ${group}${scope(path)} — ${valid.join(', ')}`,
+        detail:
+          'IETF AIPREF (draft-ietf-aipref-attach). The drafts are pre-last-call; treat this as a forward-looking signal.',
+      });
+    }
+    if (crossVocabulary.length > 0) {
+      findings.push({
+        status: 'warn',
+        message: `Content-Usage uses Content Signals vocabulary for User-agent: ${group}`,
+        detail: crossVocabulary.join(', '),
+        hint: 'AIPREF defines train-ai and search with y/n values. Content Signals defines ai-train, ai-input and search with yes/no. Write Content-Usage: train-ai=n, and keep ai-train=no on the Content-Signal line.',
+        learnMoreUrl: guideUrl(meta.id, 'content-usage-vocabulary'),
+      });
+    }
+    if (invalidValue.length > 0) {
+      findings.push({
+        status: 'warn',
+        message: `Content-Usage value(s) outside the AIPREF vocabulary for User-agent: ${group}`,
+        detail: invalidValue.join(', '),
+        hint: 'AIPREF preference values are y and n. An absent token means "unknown", never "allowed".',
+        learnMoreUrl: guideUrl(meta.id, 'content-usage-vocabulary'),
+      });
+    }
+    if (unknown.length > 0) {
+      findings.push({
+        status: 'warn',
+        message: `Unknown Content-Usage token(s) for User-agent: ${group}`,
+        detail: unknown.join(', '),
+        hint: 'AIPREF vocabulary v07 defines train-ai and search. Extensions require a standards-track RFC.',
+        learnMoreUrl: guideUrl(meta.id, 'content-usage-vocabulary'),
+      });
+    }
+    if (malformed.length > 0) {
+      findings.push({
+        status: 'warn',
+        message: `Malformed Content-Usage segment(s) for User-agent: ${group}`,
+        detail: malformed.join(', '),
+        hint: 'Content-Usage takes an optional path pattern then a Structured Fields dictionary, e.g.: Content-Usage: /docs/ train-ai=n, search=y.',
+        learnMoreUrl: guideUrl(meta.id, 'invalid-content-usage'),
       });
     }
   }

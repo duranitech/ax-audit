@@ -11,6 +11,7 @@ import type { CheckContext, CheckResult, CheckMeta, Finding } from '../types.js'
 import { buildResult, checkContentType } from './utils.js';
 import { findLinkTags, getAttribute, getTagAttribute } from './html-utils.js';
 import { parseLinkHeader } from './http-headers.js';
+import { parseRobotsLicenseDirectives } from './robots-parser.js';
 
 export const meta: CheckMeta = {
   id: 'rsl',
@@ -25,16 +26,6 @@ const UNREACHABLE_DOC_SCORE = 25;
 interface Discovery {
   mechanism: 'robots.txt License directive' | 'Link header' | 'HTML <link rel="license">';
   url: string;
-}
-
-/** Extract `License:` directive values from robots.txt (RSL 1.0 §4.4.1). */
-export function parseRobotsLicenseDirectives(text: string): string[] {
-  const values: string[] = [];
-  for (const line of text.split('\n')) {
-    const m = line.trim().match(/^License:\s*(.+)$/i);
-    if (m) values.push(m[1].trim());
-  }
-  return values;
 }
 
 function isAbsoluteUrl(value: string): boolean {
