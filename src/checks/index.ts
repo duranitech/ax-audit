@@ -6,7 +6,7 @@ import agentCard, { meta as agentCardMeta } from './agent-card.js';
 import securityTxt, { meta as securityTxtMeta } from './security-txt.js';
 import structuredData, { meta as structuredDataMeta } from './structured-data.js';
 import metaTags, { meta as metaTagsMeta } from './meta-tags.js';
-import openapi, { meta as openapiMeta } from './openapi.js';
+import apiDiscovery, { meta as apiDiscoveryMeta } from './api-discovery.js';
 import httpHeaders, { meta as httpHeadersMeta } from './http-headers.js';
 import mcpDiscovery, { meta as mcpDiscoveryMeta } from './mcp-discovery.js';
 import htmlRendering, { meta as htmlRenderingMeta } from './html-rendering.js';
@@ -26,7 +26,7 @@ export const checks: CheckModule[] = [
   { run: securityTxt, meta: securityTxtMeta },
   { run: structuredData, meta: structuredDataMeta },
   { run: metaTags, meta: metaTagsMeta },
-  { run: openapi, meta: openapiMeta },
+  { run: apiDiscovery, meta: apiDiscoveryMeta },
   { run: httpHeaders, meta: httpHeadersMeta },
   { run: mcpDiscovery, meta: mcpDiscoveryMeta },
   { run: htmlRendering, meta: htmlRenderingMeta },

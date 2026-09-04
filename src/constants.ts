@@ -592,7 +592,7 @@ export const CHECK_WEIGHTS: Record<string, number> = {
   'seo-basics': 7,
   'security-txt': 6,
   'meta-tags': 6,
-  openapi: 6,
+  'api-discovery': 6,
   'tls-https': 5,
   sitemap: 4,
   'well-known-ai': 3,
@@ -763,6 +763,31 @@ export const AI_CATALOG_ENTRY_TYPES: Record<string, string> = {
   'application/a2a-agent-card+json': 'A2A agent card',
   'application/ai-catalog+json': 'nested AI catalog',
 };
+
+/**
+ * Where API descriptions live, in order of authority.
+ *
+ * `/.well-known/openapi.json` is a folk convention: it is not IANA-registered,
+ * and the OpenAPI specification recommends the file name `openapi.json` /
+ * `openapi.yaml` without prescribing a location. It stays first because
+ * ax-audit recommended it before 3.7 and sites followed that advice, but the
+ * common real-world locations are probed too.
+ */
+export const API_DESCRIPTION_PATHS: string[] = [
+  '/.well-known/openapi.json',
+  '/openapi.json',
+  '/openapi.yaml',
+  '/.well-known/openapi.yaml',
+  '/api/openapi.json',
+  '/v1/openapi.json',
+  '/swagger.json',
+  '/api-docs',
+  '/asyncapi.json',
+  '/arazzo.json',
+];
+
+/** RFC 9264 linkset media type, required by RFC 9727 for the API catalog. */
+export const LINKSET_MEDIA_TYPE = 'application/linkset+json';
 
 export const SECURITY_TXT_REQUIRED_FIELDS: string[] = ['Contact', 'Expires'];
 
