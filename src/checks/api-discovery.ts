@@ -1,7 +1,8 @@
 import { API_DESCRIPTION_PATHS, LINKSET_MEDIA_TYPE } from '../constants.js';
 import { guideUrl } from '../guide-urls.js';
 import type { CheckContext, CheckResult, CheckMeta, Finding, FetchResponse } from '../types.js';
-import { buildResult, checkContentType, isHtmlDocument } from './utils.js';
+import { buildResult, checkContentType, isHtmlDocument, notApplicable } from './utils.js';
+import { hasApiSurface } from './surface.js';
 import { findLinkTags, getAttribute } from './html-utils.js';
 import { parseLinkHeader } from './http-headers.js';
 import { standingNote } from './well-known.js';
@@ -141,14 +142,26 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
   }
 
   if (found === null) {
+    const surface = await hasApiSurface(ctx);
+    if (!surface.found) {
+      findings.push({
+        status: 'pass',
+        message: 'No API surface — API discovery does not apply to this site',
+        detail:
+          'No description, catalog, service-desc relation or developer area was found. Run with --profile api to ' +
+          'audit as though the site offered one.',
+      });
+      return notApplicable(meta, findings, start);
+    }
+
     findings.push({
       status: 'fail',
-      message: 'No machine-readable API description found',
-      detail: `Checked /.well-known/api-catalog, Link and <link> rel="service-desc", and ${API_DESCRIPTION_PATHS.join(', ')}`,
+      message: 'API surface present but no machine-readable description found',
+      detail: `Evidence of an API: ${surface.reason}. Checked /.well-known/api-catalog, Link and <link> rel="service-desc", and ${API_DESCRIPTION_PATHS.join(', ')}`,
       hint:
-        'If your site offers an API, publish an OpenAPI description an agent can read without a human reading your docs. ' +
-        'Serve it at /openapi.json and advertise it with a Link header: Link: </openapi.json>; rel="service-desc". ' +
-        'For several APIs, publish an RFC 9727 catalog at /.well-known/api-catalog.',
+        'The API exists; nothing describes it in a form an agent can read, so using it requires a human to read your ' +
+        'documentation first. Serve an OpenAPI description at /openapi.json and advertise it with ' +
+        'Link: </openapi.json>; rel="service-desc". For several APIs, publish an RFC 9727 catalog.',
       learnMoreUrl: guideUrl(meta.id, 'not-found'),
     });
     return buildResult(meta, 0, findings, start);

@@ -51,11 +51,30 @@ describe('agent-card: identity and aliases', () => {
 });
 
 describe('agent-card: discovery', () => {
-  it('should score 0 when neither path serves a card', async () => {
+  it('should report N/A when the site is not agent-facing', async () => {
     const result = await check(mockContext());
+    assert.equal(result.applicable, false, 'asking a brochure site for an Agent Card is noise');
+    assert.equal(result.findings[0].status, 'pass');
+    assert.ok(result.findings[0].detail.includes('--profile agent'));
+  });
+
+  it('should fail an agent-facing site with no card', async () => {
+    const ctx = mockContext(
+      { '/openapi.json': mockResponse({ body: '{"openapi":"3.1.0"}' }) },
+      { html: '<html><body><a href="/api">API</a></body></html>' },
+    );
+    const result = await check(ctx);
     assert.equal(result.score, 0);
-    assert.equal(result.findings[0].status, 'fail');
-    assert.ok(result.findings[0].detail.includes(LEGACY), 'the report should say both paths were tried');
+    assert.notEqual(result.applicable, false);
+    const finding = result.findings.find((f) => f.status === 'fail');
+    assert.ok(finding.detail.includes('agent-facing'));
+    assert.ok(finding.hint.includes('nothing tells an agent what'));
+  });
+
+  it('should apply when the profile forces it', async () => {
+    const result = await check({ ...mockContext(), profile: 'agent' });
+    assert.notEqual(result.applicable, false);
+    assert.equal(result.score, 0);
   });
 
   it('should score a complete 1.0 card at the registered path 100', async () => {

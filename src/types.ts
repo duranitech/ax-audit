@@ -96,6 +96,12 @@ export interface CheckContext {
   fetch: (url: string, options?: FetchOptions) => Promise<FetchResponse>;
   html: string;
   headers: Record<string, string>;
+  /**
+   * Forces protocol checks applicable regardless of what the site currently
+   * exposes, so a team can audit against what they intend to build. `auto`
+   * (the default) detects each surface from the site itself.
+   */
+  profile?: 'auto' | 'api' | 'mcp' | 'agent' | 'docs' | 'commerce' | 'all';
 }
 
 export interface CheckModule {
@@ -121,6 +127,12 @@ export interface AuditReport {
 export interface AuditOptions {
   url: string;
   checks?: string[];
+  /**
+   * Forces protocol checks applicable. By default a check for a surface the
+   * site does not have reports N/A rather than zero; a profile says "audit me
+   * as though I had one".
+   */
+  profile?: 'auto' | 'api' | 'mcp' | 'agent' | 'docs' | 'commerce' | 'all';
   timeout?: number;
   verbose?: boolean;
   /** Retry attempts for transient fetch failures (timeouts, 5xx, network errors). Default 2. */

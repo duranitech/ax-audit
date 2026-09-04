@@ -8,7 +8,8 @@ import {
 } from '../constants.js';
 import { guideUrl } from '../guide-urls.js';
 import type { CheckContext, CheckResult, CheckMeta, Finding, FetchResponse } from '../types.js';
-import { buildResult, checkContentType, isHtmlDocument } from './utils.js';
+import { buildResult, checkContentType, isHtmlDocument, notApplicable } from './utils.js';
+import { hasMcpSurface } from './surface.js';
 import { standingNote } from './well-known.js';
 
 /**
@@ -136,12 +137,24 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
   const found = await locate(ctx);
 
   if (found.length === 0) {
+    const surface = await hasMcpSurface(ctx);
+    if (!surface.found) {
+      findings.push({
+        status: 'pass',
+        message: 'No MCP server — MCP discovery does not apply to this site',
+        detail:
+          'A server card describes an MCP server so agents can find it. A site that runs none has nothing to ' +
+          'advertise. Run with --profile mcp to audit as though it did.',
+      });
+      return notApplicable(meta, findings, start);
+    }
+
     findings.push({
       status: 'fail',
-      message: 'No MCP server discovery found',
-      detail: `Checked ${Object.values(MECHANISM_LABEL).join(', ')}`,
+      message: 'MCP server present but not discoverable',
+      detail: `Evidence of a server: ${surface.reason}.`,
       hint:
-        'If you run an MCP server, publish a server card so agents can find it without being told the URL. ' +
+        'Agents have to be told the URL by a human. Publish a server card so they can find it. ' +
         'Serve it at <your-mcp-endpoint>/server-card with Content-Type: application/mcp-server-card+json, and ' +
         'reference it from /.well-known/ai-catalog.json. A card declares $schema, name (reverse-DNS), version, ' +
         'description and remotes[] — not tools, which agents read live from tools/list.',

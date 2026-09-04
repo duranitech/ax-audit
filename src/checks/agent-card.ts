@@ -6,7 +6,8 @@ import {
 } from '../constants.js';
 import { guideUrl } from '../guide-urls.js';
 import type { CheckContext, CheckResult, CheckMeta, Finding, FetchResponse } from '../types.js';
-import { buildResult, checkContentType, isHtmlDocument } from './utils.js';
+import { buildResult, checkContentType, isHtmlDocument, notApplicable } from './utils.js';
+import { hasAgentSurface } from './surface.js';
 import { WELL_KNOWN, standingNote } from './well-known.js';
 
 /**
@@ -86,14 +87,30 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
   const found = await locateCard(ctx);
 
   if (found === null) {
+    // An Agent Card describes capabilities another agent can invoke. Most sites
+    // have none, and asking a restaurant to publish one is noise — so the check
+    // only applies where the site is already agent-facing.
+    const surface = await hasAgentSurface(ctx);
+    if (!surface.found) {
+      findings.push({
+        status: 'pass',
+        message: 'No agent-facing surface — an Agent Card does not apply to this site',
+        detail:
+          'No API, MCP server or existing card was found. An Agent Card advertises capabilities another agent can ' +
+          'invoke; a site that offers none has nothing to put in it. Run with --profile agent to audit as though it did.',
+      });
+      return notApplicable(meta, findings, start);
+    }
+
     findings.push({
       status: 'fail',
       message: `${CANONICAL_PATH} not found`,
-      detail: `Also tried the pre-0.3 path ${LEGACY_PATH}. ${standingNote(CANONICAL_PATH) ?? ''}`.trim(),
+      detail:
+        `Site is agent-facing (${surface.reason}). Also tried the pre-0.3 path ${LEGACY_PATH}. ${standingNote(CANONICAL_PATH) ?? ''}`.trim(),
       hint:
-        'Publish an A2A Agent Card at /.well-known/agent-card.json describing what your site can do for an agent. ' +
-        'A minimal 1.0 card needs name, description, version, capabilities, supportedInterfaces, defaultInputModes, ' +
-        `defaultOutputModes and skills. Spec: ${WELL_KNOWN[CANONICAL_PATH].specUrl}`,
+        'This site offers something an agent could call, but nothing tells an agent what. Publish an A2A Agent Card ' +
+        'at /.well-known/agent-card.json. A minimal 1.0 card needs name, description, version, capabilities, ' +
+        `supportedInterfaces, defaultInputModes, defaultOutputModes and skills. Spec: ${WELL_KNOWN[CANONICAL_PATH].specUrl}`,
       learnMoreUrl: guideUrl(meta.id, 'not-found'),
     });
     return buildResult(meta, 0, findings, start);

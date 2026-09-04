@@ -3,6 +3,7 @@ import type { CheckContext, CheckResult, CheckMeta, Finding, FetchResponse } fro
 import { buildResult, isHtmlDocument, notApplicable } from './utils.js';
 import { parseFrontmatter } from './frontmatter.js';
 import { standingNote } from './well-known.js';
+import { hasDocsSurface } from './surface.js';
 
 /**
  * "agent-skills" — procedural instructions an agent can install, rather than
@@ -60,20 +61,6 @@ async function fetchDocument(ctx: CheckContext, path: string): Promise<FetchResp
   return res;
 }
 
-/**
- * Whether this site is the kind that would have skills to publish. Used to
- * decide between "you are missing something" and "this does not apply to you".
- */
-async function hasDeveloperSurface(ctx: CheckContext): Promise<boolean> {
-  if (/<a[^>]+href\s*=\s*["'][^"']*\/(docs|documentation|api|developers?|reference)\b/i.test(ctx.html ?? '')) {
-    return true;
-  }
-  const llms = await ctx.fetch(`${ctx.url}/llms.txt`);
-  if (llms.ok && llms.body.trim().length > 0) return true;
-  const openapi = await ctx.fetch(`${ctx.url}/openapi.json`);
-  return openapi.ok && openapi.body.trim().length > 0;
-}
-
 export default async function check(ctx: CheckContext): Promise<CheckResult> {
   const start = performance.now();
   const findings: Finding[] = [];
@@ -88,7 +75,7 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
     if (res !== null) return validateSingleSkill(path, res, findings, start);
   }
 
-  if (!(await hasDeveloperSurface(ctx))) {
+  if (!(await hasDocsSurface(ctx)).found) {
     findings.push({
       status: 'pass',
       message: 'No developer-facing surface — skills do not apply to this site',

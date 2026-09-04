@@ -4,11 +4,11 @@ import check from '../../dist/checks/api-discovery.js';
 import { mockContext, mockResponse } from '../helpers.js';
 
 describe('openapi', () => {
-  it('should return score 0 when openapi.json is not found', async () => {
-    const ctx = mockContext();
-    const result = await check(ctx);
-    assert.equal(result.score, 0);
-    assert.equal(result.findings[0].status, 'fail');
+  it('should report N/A when the site has no API surface', async () => {
+    const result = await check(mockContext());
+    assert.equal(result.applicable, false, 'a blog has no API to describe');
+    assert.equal(result.findings[0].status, 'pass');
+    assert.ok(result.findings[0].detail.includes('--profile api'));
   });
 
   it('should return score 10 for invalid JSON', async () => {
@@ -243,10 +243,19 @@ describe('api-discovery: discovery mechanisms', () => {
     assert.equal(result.score, 0, 'a Swagger UI page is not a machine-readable description');
   });
 
-  it('should list every path it tried when nothing is found', async () => {
-    const result = await check(mockContext());
-    assert.ok(result.findings[0].detail.includes('/openapi.json'));
-    assert.ok(result.findings[0].detail.includes('api-catalog'));
+  it('should list every path it tried when an API exists but is undescribed', async () => {
+    const result = await check(mockContext({}, { html: '<html><body><a href="/developers">Developers</a></body></html>' }));
+    const finding = result.findings.find((f) => f.status === 'fail');
+    assert.ok(finding.detail.includes('/openapi.json'));
+    assert.ok(finding.detail.includes('api-catalog'));
+    assert.ok(finding.detail.includes('Evidence of an API'));
+    assert.ok(finding.hint.includes('requires a human to read your documentation first'));
+  });
+
+  it('should apply when the profile forces it', async () => {
+    const result = await check({ ...mockContext(), profile: 'api' });
+    assert.notEqual(result.applicable, false);
+    assert.equal(result.score, 0);
   });
 });
 

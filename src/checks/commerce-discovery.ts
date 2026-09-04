@@ -2,6 +2,7 @@ import { guideUrl } from '../guide-urls.js';
 import type { CheckContext, CheckResult, CheckMeta, Finding } from '../types.js';
 import { buildResult, isHtmlDocument, notApplicable } from './utils.js';
 import { standingNote } from './well-known.js';
+import { forcedBy, profileFrom } from './surface.js';
 
 /**
  * "commerce-discovery" — can an agent buy from this site without a human
@@ -104,7 +105,7 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
 
   if (profile === null) {
     const commerce = hasCommerceSignals(ctx.html ?? '');
-    if (!commerce.found) {
+    if (!commerce.found && !forcedBy(profileFrom(ctx), 'commerce')) {
       findings.push({
         status: 'pass',
         message: 'No commerce surface — agentic-commerce discovery does not apply to this site',

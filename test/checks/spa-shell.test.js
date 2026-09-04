@@ -39,9 +39,11 @@ describe('SPA catch-all responses are absence, not corruption', () => {
       '/.well-known/agent-card.json': mockResponse({ body: SHELL, headers: { 'content-type': 'text/html' } }),
     });
     const result = await agentCard(ctx);
-    assert.equal(result.score, 0);
-    assert.ok(result.findings.some((f) => f.message.includes('not found')));
     assert.ok(!result.findings.some((f) => f.message.includes('Invalid JSON')), 'the site has no card, not a broken one');
+    assert.ok(
+      result.applicable === false || result.findings.some((f) => f.message.includes('not found')),
+      'the shell must read as absence, whether that lands on N/A or on a real miss',
+    );
   });
 
   it('should report the MCP server card as missing, not malformed', async () => {
@@ -50,9 +52,8 @@ describe('SPA catch-all responses are absence, not corruption', () => {
       '/.well-known/mcp/server-card.json': mockResponse({ body: SHELL, headers: { 'content-type': 'text/html' } }),
     });
     const result = await mcpDiscovery(ctx);
-    assert.equal(result.score, 0);
-    assert.ok(result.findings.some((f) => f.message.includes('No MCP server discovery found')));
     assert.ok(!result.findings.some((f) => f.message.includes('Invalid JSON')));
+    assert.equal(result.applicable, false, 'shells at every path mean no MCP server, not a broken card');
   });
 
   it('should report the API description as missing, not malformed', async () => {
@@ -60,8 +61,8 @@ describe('SPA catch-all responses are absence, not corruption', () => {
       '/openapi.json': mockResponse({ body: SHELL, headers: { 'content-type': 'text/html' } }),
     });
     const result = await apiDiscovery(ctx);
-    assert.equal(result.score, 0);
-    assert.ok(result.findings.some((f) => f.message.includes('No machine-readable API description found')));
+    assert.ok(!result.findings.some((f) => f.message.includes('Invalid JSON')));
+    assert.equal(result.applicable, false, 'a shell at /openapi.json is not an API description');
   });
 
   it('should still report a genuinely broken document as broken', async () => {
@@ -70,6 +71,7 @@ describe('SPA catch-all responses are absence, not corruption', () => {
     });
     const result = await agentCard(ctx);
     assert.equal(result.score, 10);
+    assert.notEqual(result.applicable, false, 'a card that exists but is broken is a real finding');
     assert.ok(result.findings.some((f) => f.message === 'Invalid JSON'));
   });
 

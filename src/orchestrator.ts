@@ -17,6 +17,7 @@ export async function audit(options: AuditOptions): Promise<AuditReport> {
     fetch: fetcher.fetch,
     html: homepage.body,
     headers: homepage.headers,
+    profile: options.profile ?? 'auto',
   };
 
   // Selection matches a check's current id or any former one, so a `--checks`

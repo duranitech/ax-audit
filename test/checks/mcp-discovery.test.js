@@ -4,11 +4,25 @@ import check from '../../dist/checks/mcp-discovery.js';
 import { mockContext, mockResponse } from '../helpers.js';
 
 describe('mcp', () => {
-  it('should return score 0 when no MCP discovery exists at all', async () => {
-    const ctx = mockContext({});
+  it('should report N/A when the site runs no MCP server', async () => {
+    const result = await check(mockContext({}));
+    assert.equal(result.applicable, false, 'a site with no MCP server has nothing to advertise');
+    assert.ok(result.findings[0].detail.includes('--profile mcp'));
+  });
+
+  it('should fail a site that runs an MCP server nobody can find', async () => {
+    const ctx = mockContext({}, { html: '<html><body><a href="/mcp">Our MCP endpoint</a></body></html>' });
     const result = await check(ctx);
     assert.equal(result.score, 0);
-    assert.ok(result.findings.some(f => f.status === 'fail' && f.message.includes('No MCP server discovery found')));
+    assert.notEqual(result.applicable, false);
+    const finding = result.findings.find(f => f.status === 'fail');
+    assert.ok(finding.message.includes('present but not discoverable'));
+    assert.ok(finding.hint.includes('told the URL by a human'));
+  });
+
+  it('should apply when the profile forces it', async () => {
+    const result = await check({ ...mockContext({}), profile: 'mcp' });
+    assert.notEqual(result.applicable, false);
   });
 
   it('should return score 10 for invalid JSON', async () => {
