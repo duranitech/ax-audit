@@ -7,7 +7,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'));
 
 export const VERSION: string = pkg.version;
-export const USER_AGENT = `ax-audit/${pkg.version} (https://github.com/axrush/ax-audit)`;
+export const USER_AGENT = `ax-audit/${pkg.version} (https://github.com/duranitech/ax-audit)`;
 
 /**
  * What an AI client does with a page, and therefore what a site loses by

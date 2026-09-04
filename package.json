@@ -4,14 +4,14 @@
   "description": "Audit websites for AI Agent Experience (AX) readiness. Lighthouse for AI Agents.",
   "type": "module",
   "license": "Apache-2.0",
-  "author": "AX Rush (https://axrush.com)",
+  "author": "Durani Technologies (https://axrush.com)",
   "repository": {
     "type": "git",
-    "url": "https://github.com/axrush/ax-audit.git"
+    "url": "https://github.com/duranitech/ax-audit.git"
   },
   "homepage": "https://axrush.com",
   "bugs": {
-    "url": "https://github.com/axrush/ax-audit/issues"
+    "url": "https://github.com/duranitech/ax-audit/issues"
   },
   "keywords": [
     "ax",

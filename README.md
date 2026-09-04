@@ -4,9 +4,9 @@
 
 <h1 align="center">ax-audit</h1>
 
-[![CI](https://github.com/axrush/ax-audit/actions/workflows/ci.yml/badge.svg)](https://github.com/axrush/ax-audit/actions/workflows/ci.yml)
+[![CI](https://github.com/duranitech/ax-audit/actions/workflows/ci.yml/badge.svg)](https://github.com/duranitech/ax-audit/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/ax-audit.svg)](https://www.npmjs.com/package/ax-audit)
-[![license](https://img.shields.io/npm/l/ax-audit.svg)](https://github.com/axrush/ax-audit/blob/main/LICENSE)
+[![license](https://img.shields.io/npm/l/ax-audit.svg)](https://github.com/duranitech/ax-audit/blob/main/LICENSE)
 [![node](https://img.shields.io/node/v/ax-audit.svg)](https://nodejs.org)
 
 **Lighthouse for AI Agents.** Audit any website's AI Agent Experience (AX) readiness in seconds.
@@ -148,8 +148,8 @@ Contributions are welcome — see **[docs/architecture.md](docs/architecture.md)
 
 ## Related
 
-- **[ax-init](https://github.com/axrush/ax-init)** — generate the AX files this tool audits
-- **[ax-cite](https://github.com/axrush/ax-cite)** — embed AI-extractable structured data in your pages
+- **[ax-init](https://github.com/duranitech/ax-init)** — generate the AX files this tool audits
+- **[ax-cite](https://github.com/duranitech/ax-cite)** — embed AI-extractable structured data in your pages
 
 ## License
 
@@ -157,4 +157,4 @@ Contributions are welcome — see **[docs/architecture.md](docs/architecture.md)
 
 ---
 
-Built by [AX Rush](https://axrush.com)
+**[AX Rush](https://axrush.com)** — the agent-experience toolkit, by [Durani Technologies](https://github.com/duranitech).

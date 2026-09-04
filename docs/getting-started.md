@@ -105,4 +105,4 @@ npx ax-audit https://your-site.com --checks agent-access
 - [checks.md](./checks.md) — exact scoring of all 26 checks, with the weight table
 - [concepts.md](./concepts.md) — the AX standards landscape explained
 - [cli.md](./cli.md) — every flag · [ci.md](./ci.md) — CI recipes · [api.md](./api.md) — programmatic use
-- [ax-init](https://github.com/axrush/ax-init) — generates most of the files this tool audits
+- [ax-init](https://github.com/duranitech/ax-init) — generates most of the files this tool audits

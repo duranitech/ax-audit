@@ -4,7 +4,7 @@
 
 Please report security vulnerabilities privately — do **not** open a public issue for them.
 
-- Use [GitHub Security Advisories](https://github.com/axrush/ax-audit/security/advisories/new) to report privately, or
+- Use [GitHub Security Advisories](https://github.com/duranitech/ax-audit/security/advisories/new) to report privately, or
 - email **info@axrush.com** with the details.
 
 Please include:

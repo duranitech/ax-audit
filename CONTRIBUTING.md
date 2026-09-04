@@ -5,7 +5,7 @@ Thanks for your interest in improving ax-audit. This guide covers the workflow, 
 ## Development setup
 
 ```bash
-git clone https://github.com/axrush/ax-audit.git
+git clone https://github.com/duranitech/ax-audit.git
 cd ax-audit
 npm install
 npm test        # builds (tsc) then runs node:test

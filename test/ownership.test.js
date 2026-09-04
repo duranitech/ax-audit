@@ -11,14 +11,23 @@ import { guideUrl } from '../dist/guide-urls.js';
  * appear in every finding, and the user agent reaches the logs of every site
  * audited. These tests fail the build rather than letting one slip through.
  */
-const OWNER = {
-  domain: 'axrush.com',
-  org: 'axrush',
-  contact: 'info@axrush.com',
-};
+/**
+ * Two identities, deliberately separate:
+ *
+ * - **Durani Technologies** owns the code. It holds the copyright, publishes
+ *   the package, and hosts the repositories.
+ * - **AX Rush** is the product. It owns the web presence, the guides every
+ *   finding links to, and the support contact.
+ *
+ * Conflating them is the mistake worth guarding against: a repository URL
+ * under the brand, or a copyright line naming the product rather than the
+ * legal entity.
+ */
+const OWNER = { name: 'Durani Technologies', org: 'duranitech' };
+const BRAND = { name: 'AX Rush', domain: 'axrush.com', contact: 'info@axrush.com' };
 
 /** Domains and handles that must not reappear anywhere in the project. */
-const RETIRED = [/lucioduran/i, /lucio\s+duran/i];
+const RETIRED = [/lucioduran/i, /lucio\s+duran/i, /github\.com\/axrush/i];
 
 function sourceFiles(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -29,30 +38,47 @@ function sourceFiles(dir) {
 }
 
 describe('ownership: shipped identity', () => {
-  it('should build guide URLs on the current domain', () => {
-    assert.equal(guideUrl('robots-txt'), `https://${OWNER.domain}/guides/robots-txt`);
-    assert.equal(guideUrl('robots-txt', 'missing-crawlers'), `https://${OWNER.domain}/guides/robots-txt#missing-crawlers`);
+  it('should build guide URLs on the product domain', () => {
+    assert.equal(guideUrl('robots-txt'), `https://${BRAND.domain}/guides/robots-txt`);
+    assert.equal(
+      guideUrl('robots-txt', 'missing-crawlers'),
+      `https://${BRAND.domain}/guides/robots-txt#missing-crawlers`,
+    );
   });
 
-  it('should identify the current repository in the user agent', () => {
+  it('should identify the owning organisation in the user agent', () => {
     // This string reaches the logs of every site audited.
-    assert.match(USER_AGENT, /^ax-audit\/\d+\.\d+\.\d+ \(https:\/\/github\.com\/axrush\/ax-audit\)$/);
+    assert.match(USER_AGENT, /^ax-audit\/\d+\.\d+\.\d+ \(https:\/\/github\.com\/duranitech\/ax-audit\)$/);
   });
 
-  it('should declare the company as author and owner in package.json', () => {
+  it('should name the owning company as author, and the product as homepage', () => {
     const pkg = JSON.parse(readFileSync('package.json', 'utf-8'));
-    assert.match(pkg.author, /AX Rush/);
-    assert.equal(pkg.homepage, `https://${OWNER.domain}`);
-    assert.ok(pkg.repository.url.includes(`github.com/${OWNER.org}/`));
-    assert.ok(pkg.bugs.url.includes(`github.com/${OWNER.org}/`));
+    assert.match(pkg.author, new RegExp(OWNER.name));
+    assert.equal(pkg.homepage, `https://${BRAND.domain}`);
   });
 
-  it('should assign copyright to the company', () => {
-    assert.match(readFileSync('LICENSE', 'utf-8'), /Copyright \d{4} AX Rush/);
+  it('should host repositories under the owning organisation, not the brand', () => {
+    const pkg = JSON.parse(readFileSync('package.json', 'utf-8'));
+    for (const url of [pkg.repository.url, pkg.bugs.url]) {
+      assert.ok(url.includes(`github.com/${OWNER.org}/`), `${url} should be under github.com/${OWNER.org}`);
+      assert.ok(!url.includes(`github.com/${BRAND.domain.split('.')[0]}/`), 'the brand is not a GitHub organisation');
+    }
   });
 
-  it('should route security reports to the company mailbox', () => {
-    assert.ok(readFileSync('SECURITY.md', 'utf-8').includes(OWNER.contact));
+  it('should assign copyright to the legal entity, not the product', () => {
+    const licence = readFileSync('LICENSE', 'utf-8');
+    assert.match(licence, new RegExp(`Copyright \\d{4} ${OWNER.name}`));
+    assert.ok(!/Copyright \d{4} AX Rush/.test(licence), 'a brand cannot hold a copyright');
+  });
+
+  it('should route security reports to the product mailbox', () => {
+    assert.ok(readFileSync('SECURITY.md', 'utf-8').includes(BRAND.contact));
+  });
+
+  it('should credit both the product and the company in the README', () => {
+    const readme = readFileSync('README.md', 'utf-8');
+    assert.ok(readme.includes(BRAND.name), 'the product should be named');
+    assert.ok(readme.includes(OWNER.name), 'the company that builds it should be named');
   });
 });
 
