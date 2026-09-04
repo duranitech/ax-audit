@@ -310,14 +310,15 @@ Proposed 4.0 weights (sum 100):
 | 3.7.0 | 11 | 553 | Corrected three checks probing paths that were never the standard, and a crawler catalogue containing tokens that do not exist |
 | 3.8.0 | 8 | 755 | Eight new checks, N/A reporting, category grouping |
 | 3.9.0 | 4 | 828 | agent-operability, llms.txt v2, provenance and freshness, cost in tokens |
-| 4.0.0 | 5 | 865 | Rescore, conditional protocol checks, profiles, per-area gates, versioned baselines |
+| 4.0.0 | 7 | 873 | Rescore, conditional protocol checks, profiles, per-area gates, versioned baselines |
 
-Four things were found by running the tool rather than by planning it, and none would have surfaced any other way:
+Five things were found by running the tool rather than by planning it, and none would have surfaced any other way:
 
 1. `agent-access` probed sites with a user agent containing `Google-Extended` — a robots.txt control token no request ever carries, so the probe tested nothing.
 2. A speculative probe against a single-page application returned the index shell, and the check reported a malformed document on a site that had none.
 3. `commerce-discovery` told a SaaS site to build a commerce integration because it prices its plans with an `Offer`.
 4. The first draft of the 4.0 rescore produced a distribution nobody asked for, because per-check `meta.weight` values silently won over the central map.
+5. `structured-data` scored a well-marked-up site at 0 because its pattern required `type` to be the first attribute on the script tag. Next.js emits `id` first, so a whole class of sites was being told to add markup they already had.
 
 Two items from the plan were **not** built, deliberately:
 

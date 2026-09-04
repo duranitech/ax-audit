@@ -28,9 +28,13 @@ All notable changes to ax-audit are documented here.
 3. `--checks agent-json`, `--checks mcp` and `--checks openapi` still work; the ids were renamed in 3.7 and the old names remain aliases.
 4. If you relied on `well-known-ai`, its live probes are now in `usage-policy` (TDMRep) and the checks that own each file.
 
+### Fixed
+
+- **JSON-LD was missed when `type` was not the first attribute** on the script tag. Next.js and several other frameworks emit `<script id="…" type="application/ld+json">`, so a large class of well-marked-up sites scored 0 on a 6-weight check and were told to add markup they already had. Three copies of the pattern now share one order-independent extractor.
+
 ### Tests
 
-865 total. New coverage for surface detection, the weight distribution (sums to 100, no check declares its own, content outweighs every area), the CLI end to end via a subprocess, and baseline versioning in both directions.
+873 total. New coverage for surface detection, the weight distribution (sums to 100, no check declares its own, content outweighs every area), the CLI end to end via a subprocess, and baseline versioning in both directions.
 
 ## [3.9.0] - 2026-09-04
 

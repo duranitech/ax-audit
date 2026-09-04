@@ -98,6 +98,6 @@ Two check states exist beyond a score:
 
 ## Testing
 
-`npm test` builds (`tsc`) and runs `node --test`. The suite (865 tests) covers every check, the scorer, baseline logic, the Markdown reporter, plus integration tests that spin up real local HTTP servers for the fetcher (per-header caching, retries, HEAD and manual redirects) and the batch orchestrator (ordering, concurrency caps). No test dependencies beyond Node.
+`npm test` builds (`tsc`) and runs `node --test`. The suite (873 tests) covers every check, the scorer, baseline logic, the Markdown reporter, plus integration tests that spin up real local HTTP servers for the fetcher (per-header caching, retries, HEAD and manual redirects) and the batch orchestrator (ordering, concurrency caps). No test dependencies beyond Node.
 
 Two classes of test exist specifically to keep the 3.x promise that no score goes down: **score-stability tests** assert that a configuration which scored 100 in 3.6 still scores 100, and that findings added inside a weighted check leave the score untouched. When those fail, the change belongs in the next major, not the current minor.
