@@ -10,6 +10,7 @@ All notable changes to ax-audit are documented here.
 
 - **`VERSION`, `CHECK_WEIGHTS`, `CHECK_CATEGORIES`, `GRADES`** exported from the entry point.
 - **`AI_CRAWLERS`, `ALL_AI_CRAWLERS`, `CORE_AI_CRAWLERS`, `LEGACY_AI_CRAWLERS`, `CRAWLER_META`, `CONTENT_SIGNALS`**, with `crawlerInfo`, `crawlerPurpose` and `legacyCrawlerNote` for looking a token up, and the `CrawlerInfo` / `CrawlerPurpose` types.
+- **`categoryScore(results, category)`** exported. It was in `cli.ts`, which meant importing `commander` to reach it; it belongs beside `calculateOverallScore` and now lives there. `--fail-on-category` is one caller and a report grouped by area is another.
 - **`test/public-api.test.js`**, which fails both ways: on a promised export that disappeared, and on a new name that leaked out of a refactor. It also holds the tables against the registered checks — every shipped check is weighed and categorised, nothing retired lingers in either, no crawler token sits in two purposes, and a check declaring its own `meta.category` agrees with the table.
 
 Nothing else changed: no check, no weight, no score. The rest of `constants.ts` stays private, because a consumer pinned to a threshold or a required-field list would make every check's internals a breaking change.

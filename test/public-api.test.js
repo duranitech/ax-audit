@@ -20,6 +20,7 @@ describe('public API', () => {
     'audit',
     'batchAudit',
     'calculateOverallScore',
+    'categoryScore',
     'getGrade',
     'checks',
     'saveBaseline',

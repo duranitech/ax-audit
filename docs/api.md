@@ -105,6 +105,12 @@ function getGrade(score: number): Grade;
 
 `calculateOverallScore` computes the weighted average; it falls back to a plain average when all selected checks have weight 0, and returns 0 for empty input. `getGrade` maps a score to its `Grade`.
 
+```ts
+function categoryScore(results: CheckResult[], category: CheckCategory): number | null;
+```
+
+`categoryScore` is the same arithmetic over one area, and `null` when the area has nothing applicable. An overall number hides an area that is entirely broken — a site can score 80 while every access check fails, because the other four carry it. This is what `--fail-on-category` gates on and what a report grouped by area shows per group.
+
 ## Baselines
 
 ```typescript
@@ -241,7 +247,7 @@ check's internals a breaking change.
 
 Within a major version, the exported function signatures and the `AuditReport` JSON shape are stable. Specifically:
 
-- **Stable:** `audit`, `batchAudit`, `calculateOverallScore`, `getGrade`, the baseline functions, the reporter functions, the reference tables above, and all exported type *shapes*.
+- **Stable:** `audit`, `batchAudit`, `calculateOverallScore`, `categoryScore`, `getGrade`, the baseline functions, the reporter functions, the reference tables above, and all exported type *shapes*.
 - **May change in minor versions:** the *set* of checks (new checks are added), individual check `score`/`findings` content, check `weight` values (new checks start at 0; reweighting is reserved for majors), and the *contents* of the reference tables — a crawler token is added the week its vendor documents one, and waiting for a major would make the table wrong for months. The tables themselves, and their shapes, are stable. Treat `results` as a list to iterate, not a fixed-length tuple.
 - **Internal:** anything not exported from `src/index.ts`, including terminal/HTML reporters and individual check modules' internals.
 

@@ -5,7 +5,7 @@ import { VERSION } from './constants.js';
 import { checks as allChecks } from './checks/index.js';
 import { allSelectableIds } from './check-ids.js';
 import { saveBaseline, loadBaseline, diffBaseline } from './baseline.js';
-import { calculateOverallScore } from './scorer.js';
+import { categoryScore } from './scorer.js';
 import { CHECK_CATEGORIES } from './constants.js';
 import type { AuditReport, BaselineDiff, CheckCategory, OutputFormat } from './types.js';
 
@@ -64,19 +64,6 @@ export function parseCategoryThresholds(raw: string): { thresholds: Map<CheckCat
   return { thresholds };
 }
 
-/** Score of one report area, over the checks in it that apply. */
-export function categoryScore(report: AuditReport, category: CheckCategory): number | null {
-  const metas = new Map(allChecks.map((c) => [c.meta.id, c.meta]));
-  const inCategory = report.results.filter((r) => {
-    if (r.applicable === false) return false;
-    const meta = metas.get(r.id);
-    return (meta?.category ?? CHECK_CATEGORIES[r.id]) === category;
-  });
-  if (inCategory.length === 0) return null;
-
-  const metasFor = inCategory.map((r) => metas.get(r.id)).filter((m): m is NonNullable<typeof m> => m !== undefined);
-  return calculateOverallScore(inCategory, metasFor);
-}
 
 export function cli(argv: string[]): void {
   const program = new Command();
@@ -294,7 +281,7 @@ function failsCategoryGate(result: AuditReport, thresholds: Map<CheckCategory, n
   let failed = false;
 
   for (const [category, threshold] of thresholds) {
-    const score = categoryScore(result, category);
+    const score = categoryScore(result.results, category);
     if (score === null) {
       console.error(`  ${category}: n/a (no applicable checks) — threshold ${threshold} not evaluated`);
       continue;

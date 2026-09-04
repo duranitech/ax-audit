@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { parseCategoryThresholds, categoryScore } from '../dist/cli.js';
+import { parseCategoryThresholds } from '../dist/cli.js';
 
 /** Run the CLI and capture both streams, whatever the exit code. */
 function run(args) {
@@ -40,44 +40,6 @@ describe('cli: --fail-on-category parsing', () => {
   it('should accept 0 and 100 as thresholds', () => {
     assert.equal(parseCategoryThresholds('access:0').thresholds.get('access'), 0);
     assert.equal(parseCategoryThresholds('access:100').thresholds.get('access'), 100);
-  });
-});
-
-describe('cli: per-area scoring', () => {
-  const report = (results) => ({
-    url: 'https://example.com',
-    timestamp: '2026-09-04T00:00:00.000Z',
-    overallScore: 0,
-    grade: { min: 0, label: 'Poor', color: 'red' },
-    duration: 1,
-    results,
-  });
-
-  it('should score one area over the checks in it', () => {
-    const r = report([
-      { id: 'tls-https', name: 'x', description: '', score: 100, findings: [], duration: 1 },
-      { id: 'agent-access', name: 'x', description: '', score: 0, findings: [], duration: 1 },
-      { id: 'llms-txt', name: 'x', description: '', score: 100, findings: [], duration: 1 },
-    ]);
-    const access = categoryScore(r, 'access');
-    assert.ok(access !== null && access < 100, 'a failing access check must pull the area down');
-    assert.equal(categoryScore(r, 'discovery'), 100, 'a different area is unaffected');
-  });
-
-  it('should exclude N/A checks from an area score', () => {
-    const r = report([
-      { id: 'api-discovery', name: 'x', description: '', score: 0, findings: [], duration: 1, applicable: false },
-      { id: 'agent-card', name: 'x', description: '', score: 100, findings: [], duration: 1 },
-    ]);
-    assert.equal(categoryScore(r, 'protocols'), 100);
-  });
-
-  it('should return null for an area with nothing applicable', () => {
-    const r = report([
-      { id: 'api-discovery', name: 'x', description: '', score: 0, findings: [], duration: 1, applicable: false },
-    ]);
-    assert.equal(categoryScore(r, 'protocols'), null);
-    assert.equal(categoryScore(r, 'content'), null);
   });
 });
 

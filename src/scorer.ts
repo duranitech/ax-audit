@@ -1,6 +1,7 @@
-import { CHECK_WEIGHTS, GRADES } from './constants.js';
+import { CHECK_CATEGORIES, CHECK_WEIGHTS, GRADES } from './constants.js';
+import { checks as allChecks } from './checks/index.js';
 import { clampScore } from './checks/utils.js';
-import type { CheckResult, CheckMeta, Grade } from './types.js';
+import type { CheckCategory, CheckResult, CheckMeta, Grade } from './types.js';
 
 /**
  * Weighted average across the checks that ran and apply.
@@ -50,4 +51,33 @@ export function getGrade(score: number): Grade {
     if (score >= grade.min) return grade;
   }
   return GRADES[GRADES.length - 1];
+}
+
+/**
+ * Score of one report area, over the checks in it that apply.
+ *
+ * `null` when the area has nothing applicable — a site with no protocol
+ * surface at all has no protocols score, and reporting 0 there would say
+ * the opposite of what the N/A results say individually.
+ *
+ * An overall number hides an area that is entirely broken: a site can
+ * score 80 while every access check fails, because the other four areas
+ * carry it. This is what `--fail-on-category` gates on, and what a report
+ * grouped by area shows per group.
+ */
+export function categoryScore(results: CheckResult[], category: CheckCategory): number | null {
+  const metas = new Map(allChecks.map((c) => [c.meta.id, c.meta]));
+
+  const inCategory = results.filter((r) => {
+    if (r.applicable === false) return false;
+    const meta = metas.get(r.id);
+    return (meta?.category ?? CHECK_CATEGORIES[r.id]) === category;
+  });
+  if (inCategory.length === 0) return null;
+
+  const metasFor = inCategory
+    .map((r) => metas.get(r.id))
+    .filter((m): m is CheckMeta => m !== undefined);
+
+  return calculateOverallScore(inCategory, metasFor);
 }
