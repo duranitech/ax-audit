@@ -187,12 +187,62 @@ interface FetchResponse {
 
 `ctx.fetch` custom headers merge case-insensitively over the defaults (a custom `Accept` or `User-Agent` replaces the default), and responses are cached per URL + normalized headers — mirroring HTTP `Vary`. Your `fetch` implementation should never throw; model failures as `{ status: 0, ok: false, error }`.
 
+## Reference tables
+
+Exported so a consumer can *describe* an audit rather than only run one:
+a report that prints what a check is worth, a page that groups results by
+area, a robots.txt editor that names the crawlers worth naming. Before
+4.1 none of these were reachable — the `exports` map admits only the
+entry point — so every consumer transcribed them and wrote a test to
+catch the day the copy went stale.
+
+```ts
+const VERSION: string;
+
+const CHECK_WEIGHTS: Record<string, number>;
+const CHECK_CATEGORIES: Record<string, CheckCategory>;
+const GRADES: Grade[];
+
+const AI_CRAWLERS: Record<CrawlerPurpose, string[]>;
+const ALL_AI_CRAWLERS: string[];
+const CORE_AI_CRAWLERS: string[];
+const LEGACY_AI_CRAWLERS: Record<string, string>;  // token -> why it does nothing
+const CRAWLER_META: Record<string, CrawlerInfo>;
+const CONTENT_SIGNALS: string[];
+
+function crawlerInfo(token: string): CrawlerInfo | undefined;
+function crawlerPurpose(token: string): CrawlerPurpose | undefined;
+function legacyCrawlerNote(token: string): string | undefined;
+
+type CrawlerPurpose = 'training' | 'search' | 'user-fetch' | 'agent';
+
+interface CrawlerInfo {
+  vendor: string;
+  purpose: CrawlerPurpose;
+  honorsRobots: boolean | 'partial';
+  impact: string;      // one sentence on what blocking this costs
+  docUrl: string;
+  ipListUrl?: string;  // published ranges, for reverse verification
+  signsRequests?: boolean;   // Web Bot Auth (RFC 9421)
+  tokenOnly?: boolean;       // a robots.txt control that never appears in a request
+  note?: string;
+}
+```
+
+`CHECK_WEIGHTS` and `CHECK_CATEGORIES` both cover every shipped check, and
+`test/public-api.test.js` fails if either stops doing so. A check may also
+declare `meta.category` for itself; when it does, the two must agree.
+
+The rest of `constants.ts` — thresholds, media types, required-field
+lists — stays private. A consumer pinned to those would make every
+check's internals a breaking change.
+
 ## API stability
 
 Within a major version, the exported function signatures and the `AuditReport` JSON shape are stable. Specifically:
 
-- **Stable:** `audit`, `batchAudit`, `calculateOverallScore`, `getGrade`, the baseline functions, the reporter functions, and all exported type *shapes*.
-- **May change in minor versions:** the *set* of checks (new checks are added), individual check `score`/`findings` content, and check `weight` values (new checks start at 0; reweighting is reserved for majors). Treat `results` as a list to iterate, not a fixed-length tuple.
+- **Stable:** `audit`, `batchAudit`, `calculateOverallScore`, `getGrade`, the baseline functions, the reporter functions, the reference tables above, and all exported type *shapes*.
+- **May change in minor versions:** the *set* of checks (new checks are added), individual check `score`/`findings` content, check `weight` values (new checks start at 0; reweighting is reserved for majors), and the *contents* of the reference tables — a crawler token is added the week its vendor documents one, and waiting for a major would make the table wrong for months. The tables themselves, and their shapes, are stable. Treat `results` as a list to iterate, not a fixed-length tuple.
 - **Internal:** anything not exported from `src/index.ts`, including terminal/HTML reporters and individual check modules' internals.
 
 ## Exported types
