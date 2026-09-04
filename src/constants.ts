@@ -610,6 +610,7 @@ export const CHECK_WEIGHTS: Record<string, number> = {
   webmcp: 0,
   'commerce-discovery': 0,
   'auth-discovery': 0,
+  'agent-operability': 0,
 };
 
 /**
@@ -643,6 +644,7 @@ export const CHECK_CATEGORIES: Record<string, CheckCategory> = {
   webmcp: 'protocols',
   'commerce-discovery': 'protocols',
   'auth-discovery': 'protocols',
+  'agent-operability': 'content',
 };
 
 export const GRADES: Grade[] = [

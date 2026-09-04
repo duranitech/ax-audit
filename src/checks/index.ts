@@ -26,6 +26,7 @@ import agentSkills, { meta as agentSkillsMeta } from './agent-skills.js';
 import webmcp, { meta as webmcpMeta } from './webmcp.js';
 import commerceDiscovery, { meta as commerceDiscoveryMeta } from './commerce-discovery.js';
 import authDiscovery, { meta as authDiscoveryMeta } from './auth-discovery.js';
+import agentOperability, { meta as agentOperabilityMeta } from './agent-operability.js';
 
 export const checks: CheckModule[] = [
   { run: llmsTxt, meta: llmsTxtMeta },
@@ -54,4 +55,5 @@ export const checks: CheckModule[] = [
   { run: webmcp, meta: webmcpMeta },
   { run: commerceDiscovery, meta: commerceDiscoveryMeta },
   { run: authDiscovery, meta: authDiscoveryMeta },
+  { run: agentOperability, meta: agentOperabilityMeta },
 ];
