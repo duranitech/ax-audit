@@ -605,6 +605,8 @@ export const CHECK_WEIGHTS: Record<string, number> = {
   'ai-directives': 0,
   'usage-policy': 0,
   'http-hygiene': 0,
+  'ai-catalog': 0,
+  'agent-skills': 0,
 };
 
 /**
@@ -633,6 +635,8 @@ export const CHECK_CATEGORIES: Record<string, CheckCategory> = {
   'ai-directives': 'access',
   'usage-policy': 'policy',
   'http-hygiene': 'access',
+  'ai-catalog': 'protocols',
+  'agent-skills': 'protocols',
 };
 
 export const GRADES: Grade[] = [

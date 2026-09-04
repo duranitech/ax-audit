@@ -21,6 +21,8 @@ import crawlEfficiency, { meta as crawlEfficiencyMeta } from './crawl-efficiency
 import aiDirectives, { meta as aiDirectivesMeta } from './ai-directives.js';
 import usagePolicy, { meta as usagePolicyMeta } from './usage-policy.js';
 import httpHygiene, { meta as httpHygieneMeta } from './http-hygiene.js';
+import aiCatalog, { meta as aiCatalogMeta } from './ai-catalog.js';
+import agentSkills, { meta as agentSkillsMeta } from './agent-skills.js';
 
 export const checks: CheckModule[] = [
   { run: llmsTxt, meta: llmsTxtMeta },
@@ -44,4 +46,6 @@ export const checks: CheckModule[] = [
   { run: aiDirectives, meta: aiDirectivesMeta },
   { run: usagePolicy, meta: usagePolicyMeta },
   { run: httpHygiene, meta: httpHygieneMeta },
+  { run: aiCatalog, meta: aiCatalogMeta },
+  { run: agentSkills, meta: agentSkillsMeta },
 ];
