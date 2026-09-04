@@ -32,7 +32,6 @@ export const meta: CheckMeta = {
   id: 'agent-access',
   name: 'Agent Access',
   description: 'Checks that AI crawler user-agents are not blocked or served reduced content (cloaking)',
-  weight: 0, // Informational in 3.x — will gain weight in v4.0 (score-affecting changes are treated as breaking).
   category: 'access',
 };
 

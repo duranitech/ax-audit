@@ -38,7 +38,6 @@ export const meta: CheckMeta = {
   id: 'agent-card',
   name: 'Agent Card (A2A)',
   description: 'Checks the A2A Agent Card at /.well-known/agent-card.json',
-  weight: 7,
   category: 'protocols',
   aliases: ['agent-json'],
 };

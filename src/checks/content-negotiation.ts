@@ -8,7 +8,6 @@ export const meta: CheckMeta = {
   id: 'content-negotiation',
   name: 'Content Negotiation',
   description: 'Checks whether the homepage serves Markdown to AI agents via Accept: text/markdown',
-  weight: 0, // Informational in 3.x — will gain weight in v4.0 (score-affecting changes are treated as breaking).
   category: 'content',
 };
 

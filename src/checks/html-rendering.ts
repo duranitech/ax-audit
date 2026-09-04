@@ -24,7 +24,6 @@ export const meta: CheckMeta = {
   id: 'html-rendering',
   name: 'HTML Rendering',
   description: 'Checks server-rendered content, semantic landmarks, and SPA-shell heuristics',
-  weight: 9,
 };
 
 const MIN_TEXT_LENGTH = 500;

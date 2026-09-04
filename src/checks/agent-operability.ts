@@ -31,7 +31,6 @@ export const meta: CheckMeta = {
   id: 'agent-operability',
   name: 'Agent Operability',
   description: 'Checks whether interactive elements are nameable and operable by a browser agent',
-  weight: 0, // Informational in 3.x — gains weight in 4.0.
   category: 'content',
 };
 

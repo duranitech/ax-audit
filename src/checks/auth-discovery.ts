@@ -27,7 +27,6 @@ export const meta: CheckMeta = {
   id: 'auth-discovery',
   name: 'Auth Discovery',
   description: 'Checks OAuth metadata (RFC 9728 / RFC 8414) so agents can authenticate without documentation',
-  weight: 0, // Informational in 3.x — gains weight in 4.0 where it applies.
   category: 'protocols',
 };
 

@@ -34,7 +34,6 @@ export const meta: CheckMeta = {
   id: 'webmcp',
   name: 'WebMCP',
   description: 'Checks declarative WebMCP tool annotations on forms',
-  weight: 0, // Origin trial only; never scored.
   category: 'protocols',
 };
 

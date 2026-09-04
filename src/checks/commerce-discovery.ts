@@ -31,7 +31,6 @@ export const meta: CheckMeta = {
   id: 'commerce-discovery',
   name: 'Commerce Discovery',
   description: 'Checks the Universal Commerce Protocol profile for agent-driven purchasing',
-  weight: 0, // Informational in 3.x — gains weight in 4.0 for commerce sites.
   category: 'protocols',
 };
 

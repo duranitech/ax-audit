@@ -7,8 +7,6 @@ import {
   CRAWLER_META,
   LEGACY_AI_CRAWLERS,
   PROBEABLE_CORE_CRAWLERS,
-  SCORED_CORE_CRAWLERS,
-  SCORED_KNOWN_CRAWLERS_V3,
   crawlerInfo,
   crawlerPurpose,
   legacyCrawlerNote,
@@ -81,13 +79,6 @@ describe('crawler catalogue: core sets', () => {
     for (const token of CORE_AI_CRAWLERS) {
       assert.ok(crawlerInfo(token), `${token} is core and must carry metadata explaining the block cost`);
     }
-  });
-
-  it('should keep the 3.x scoring set a subset of the current core set', () => {
-    for (const token of SCORED_CORE_CRAWLERS) {
-      assert.ok(CORE_AI_CRAWLERS.includes(token), `${token} scores but is no longer core`);
-    }
-    assert.equal(SCORED_CORE_CRAWLERS.length, 8, 'the 3.x scoring set is frozen at eight tokens');
   });
 
   it('should cover training, search and user-fetch in the core set', () => {
@@ -184,19 +175,74 @@ describe('crawler catalogue: 2026 corrections', () => {
   });
 });
 
-describe('crawler catalogue: 3.x scoring freeze', () => {
-  it('should keep the frozen v3 list free of tokens added in 3.7', () => {
-    for (const token of ['meta-webindexer', 'Amzn-SearchBot', 'MistralAI-Index', 'ExaSearchBot']) {
-      assert.ok(
-        !lower(SCORED_KNOWN_CRAWLERS_V3).includes(token.toLowerCase()),
-        `${token} was added in 3.7 and must not deduct points until 4.0`,
-      );
+describe('crawler catalogue: 4.0 scoring', () => {
+  it('should score against the full current core set', () => {
+    assert.equal(CORE_AI_CRAWLERS.length, 12, 'the 3.x eight-token freeze is gone');
+  });
+
+  it('should include the crawlers that gained share in 2026', () => {
+    for (const token of ['Meta-ExternalAgent', 'Applebot-Extended', 'Amazonbot', 'Bytespider']) {
+      assert.ok(CORE_AI_CRAWLERS.includes(token), `${token} belongs in the scored core set`);
+    }
+  });
+});
+
+describe('4.0 weights', () => {
+  it('should sum to exactly 100', async () => {
+    const { CHECK_WEIGHTS } = await import('../dist/constants.js');
+    const total = Object.values(CHECK_WEIGHTS).reduce((a, b) => a + b, 0);
+    assert.equal(total, 100);
+  });
+
+  it('should keep weights in one place', async () => {
+    const { checks } = await import('../dist/checks/index.js');
+    const declaring = checks.filter((c) => c.meta.weight !== undefined).map((c) => c.meta.id);
+    assert.deepEqual(declaring, [], 'a check declaring its own weight can drift from the central map');
+  });
+
+  it('should give every registered check a weight entry, and no orphans', async () => {
+    const { CHECK_WEIGHTS } = await import('../dist/constants.js');
+    const { checks } = await import('../dist/checks/index.js');
+    const ids = checks.map((c) => c.meta.id).sort();
+    assert.deepEqual(Object.keys(CHECK_WEIGHTS).sort(), ids);
+  });
+
+  it('should give every registered check a category', async () => {
+    const { CHECK_CATEGORIES } = await import('../dist/constants.js');
+    const { checks } = await import('../dist/checks/index.js');
+    for (const c of checks) {
+      const category = c.meta.category ?? CHECK_CATEGORIES[c.meta.id];
+      assert.ok(category, `${c.meta.id} has no category`);
     }
   });
 
-  it('should keep every 3.x scored core crawler in the frozen v3 list', () => {
-    for (const token of SCORED_CORE_CRAWLERS) {
-      assert.ok(lower(SCORED_KNOWN_CRAWLERS_V3).includes(token.toLowerCase()), `${token} missing from the freeze`);
+  it('should weight content above every other area', async () => {
+    const { CHECK_WEIGHTS, CHECK_CATEGORIES } = await import('../dist/constants.js');
+    const { checks } = await import('../dist/checks/index.js');
+    const byCategory = {};
+    for (const c of checks) {
+      const category = c.meta.category ?? CHECK_CATEGORIES[c.meta.id];
+      byCategory[category] = (byCategory[category] ?? 0) + CHECK_WEIGHTS[c.meta.id];
+    }
+    // A page with nothing in its HTML is the failure that breaks the most
+    // agents, so content leads.
+    const max = Math.max(...Object.values(byCategory));
+    assert.equal(byCategory.content, max);
+    assert.ok(CHECK_WEIGHTS['html-rendering'] >= 10, 'the single highest-impact check');
+  });
+
+  it('should score llms.txt below html-rendering, per the adoption evidence', async () => {
+    const { CHECK_WEIGHTS } = await import('../dist/constants.js');
+    assert.ok(
+      CHECK_WEIGHTS['llms-txt'] < CHECK_WEIGHTS['html-rendering'],
+      'most published llms.txt files are never fetched; a page with no content is always fatal',
+    );
+  });
+
+  it('should keep every draft-specification check at zero', async () => {
+    const { CHECK_WEIGHTS } = await import('../dist/constants.js');
+    for (const id of ['ai-catalog', 'webmcp', 'commerce-discovery']) {
+      assert.equal(CHECK_WEIGHTS[id], 0, `${id} rests on a draft that may be renamed`);
     }
   });
 });

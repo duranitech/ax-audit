@@ -23,7 +23,6 @@ export const meta: CheckMeta = {
   id: 'llms-txt',
   name: 'LLMs.txt',
   description: 'Checks /llms.txt presence, spec compliance, and link health',
-  weight: 11,
   category: 'discovery',
 };
 

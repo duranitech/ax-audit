@@ -35,7 +35,6 @@ export const meta: CheckMeta = {
   id: 'ai-catalog',
   name: 'AI Catalog',
   description: 'Checks the agent resource catalog (ai-catalog.json / ard.json) and whether its entries resolve',
-  weight: 0, // Informational: both specifications are drafts.
   category: 'protocols',
 };
 

@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import check, { meta } from '../../dist/checks/content-negotiation.js';
 import { mockContext, mockResponse } from '../helpers.js';
+import { CHECK_WEIGHTS } from '../../dist/constants.js';
 
 const HTML_PAGE = '<!doctype html><html><head><title>Example</title></head><body><main>Hello world</main></body></html>';
 const MARKDOWN_BODY = '# Example\n\nHello world. [Docs](https://example.com/docs)\n';
@@ -22,8 +23,9 @@ function negotiatingServer({ markdownHeaders = {}, markdownBody = MARKDOWN_BODY 
 }
 
 describe('content-negotiation', () => {
-  it('should have weight 0 (informational) in 3.x', () => {
-    assert.equal(meta.weight, 0);
+  it('should take its weight from the central map rather than declaring one', () => {
+    assert.equal(meta.weight, undefined, 'weights live in CHECK_WEIGHTS; two sources let them drift');
+    assert.equal(CHECK_WEIGHTS['content-negotiation'], 4);
   });
 
   it('should probe with the Accept header a real agent sends', async () => {

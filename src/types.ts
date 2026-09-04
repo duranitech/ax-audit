@@ -43,7 +43,12 @@ export interface CheckMeta {
   id: string;
   name: string;
   description: string;
-  weight: number;
+  /**
+   * Optional per-check override. Weights normally live in one place,
+   * `CHECK_WEIGHTS`; declaring them here as well let the two drift apart, which
+   * is exactly what happened between 3.x and 4.0. Prefer the central map.
+   */
+  weight?: number;
   /** Report grouping. Falls back to `CHECK_CATEGORIES[id]` when omitted. */
   category?: CheckCategory;
   /**

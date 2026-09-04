@@ -30,7 +30,6 @@ export const meta: CheckMeta = {
   id: 'http-hygiene',
   name: 'HTTP Hygiene',
   description: 'Checks status-code honesty, redirect depth, rate-limit headers and content typing',
-  weight: 0, // Informational in 3.x — gains weight in 4.0.
   category: 'access',
 };
 

@@ -29,7 +29,6 @@ export const meta: CheckMeta = {
   id: 'agent-skills',
   name: 'Agent Skills',
   description: 'Checks discoverable Agent Skills (SKILL.md) and their frontmatter',
-  weight: 0, // Informational: the discovery RFC is a draft.
   category: 'protocols',
 };
 

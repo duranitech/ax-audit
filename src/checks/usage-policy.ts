@@ -40,7 +40,6 @@ export const meta: CheckMeta = {
   id: 'usage-policy',
   name: 'Usage Policy',
   description: 'Checks machine-readable AI usage signals for coverage and internal consistency',
-  weight: 0, // Informational in 3.x — gains weight in 4.0.
   category: 'policy',
 };
 

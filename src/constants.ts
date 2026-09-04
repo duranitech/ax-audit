@@ -461,26 +461,6 @@ export const CORE_AI_CRAWLERS: string[] = [
 ];
 
 /**
- * The 3.x scoring set, frozen at the eight tokens 3.0 shipped with.
- *
- * `robots-txt` deducts points for missing core crawlers, so widening the set
- * would lower every existing score — a breaking change under the 3.x policy
- * (see docs/architecture.md). The four additions in `CORE_AI_CRAWLERS` are
- * reported informationally until 4.0, when this constant is removed and
- * scoring moves to the full list.
- */
-export const SCORED_CORE_CRAWLERS: string[] = [
-  'GPTBot',
-  'ClaudeBot',
-  'ChatGPT-User',
-  'Claude-SearchBot',
-  'Google-Extended',
-  'PerplexityBot',
-  'OAI-SearchBot',
-  'CCBot',
-];
-
-/**
  * Core crawlers that actually issue HTTP requests.
  *
  * `Google-Extended` and `Applebot-Extended` are robots.txt control tokens: they
@@ -491,69 +471,6 @@ export const SCORED_CORE_CRAWLERS: string[] = [
 export const PROBEABLE_CORE_CRAWLERS: string[] = CORE_AI_CRAWLERS.filter(
   (token) => CRAWLER_META[token]?.tokenOnly !== true,
 );
-
-/**
- * The AI-client tokens ax-audit 3.6 recognised, frozen for scoring stability.
- *
- * `robots-txt` deducts points for explicitly blocked AI crawlers. The 3.7
- * catalogue refresh added real tokens that 3.6 missed (`meta-webindexer`,
- * `Amzn-SearchBot`, `MistralAI-Index`, ...), and scoring against the new list
- * would lower the score of any site that already blocks them — a breaking
- * change under the 3.x policy (docs/architecture.md).
- *
- * So deductions are computed against this frozen list while the wider catalogue
- * drives reporting. Removed at 4.0, when weights are redistributed anyway.
- */
-export const SCORED_KNOWN_CRAWLERS_V3: string[] = [
-  'GPTBot',
-  'ClaudeBot',
-  'Claude-Web',
-  'Anthropic-AI',
-  'Google-Extended',
-  'CCBot',
-  'Bytespider',
-  'Meta-ExternalAgent',
-  'Meta-ExternalFetcher',
-  'Cohere-AI',
-  'cohere-training-data-crawler',
-  'Applebot-Extended',
-  'Amazonbot',
-  'AI2Bot',
-  'AI2Bot-Dolma',
-  'DeepSeek-AI',
-  'PanguBot',
-  'Diffbot',
-  'MistralAI-User',
-  'Kangaroo Bot',
-  'Timpibot',
-  'omgili',
-  'omgilibot',
-  'ImagesiftBot',
-  'Webzio-Extended',
-  'OAI-SearchBot',
-  'ChatGPT-User',
-  'Claude-SearchBot',
-  'Claude-User',
-  'PerplexityBot',
-  'Perplexity-User',
-  'DuckAssistBot',
-  'YouBot',
-  'Petalbot',
-  'Google-CloudVertexBot',
-  'Gemini',
-  'GeminiBot',
-  'KagiBot',
-  'NeevaBot',
-  'PhindBot',
-  'FirecrawlAgent',
-  'Facebookbot',
-  'Bingbot',
-  'Goose',
-  'AwarioBot',
-  'AwarioRssBot',
-  'AwarioSmartBot',
-  'Google-Agent',
-];
 
 /** Look up a crawler's metadata case-insensitively. */
 export function crawlerInfo(token: string): CrawlerInfo | undefined {
@@ -577,40 +494,73 @@ export function legacyCrawlerNote(token: string): string | undefined {
 }
 
 /**
- * Default weight per check (sum: 100). Individual `CheckMeta.weight` overrides this map.
- * Keep weights aligned with real-world impact — discovery + content-rendering are the
- * highest-leverage signals for AI agents.
+ * Weight per check, summing to 100. A check's own `meta.weight` overrides this
+ * map.
+ *
+ * The 4.0 distribution follows the evidence about what actually stops an agent,
+ * rather than what is easiest to check:
+ *
+ * - **Content (33)** leads, because the failure that breaks the most agents is
+ *   a page with nothing in the HTML. Most crawlers do not run JavaScript, and a
+ *   site whose content only appears after hydration is invisible to them no
+ *   matter how many discovery files it publishes. `agent-operability` joins it
+ *   at 7: browser agents read the accessibility tree, and a page of unnamed
+ *   controls cannot be operated at all.
+ * - **Access (24)** is second, because a WAF rule or a `nosnippet` directive
+ *   silently undoes everything else. These are also the failures operators are
+ *   least likely to know about.
+ * - **Discovery (21)** carries robots.txt at 9 and llms.txt at 5. llms.txt was
+ *   the highest-weighted check in 3.x at 11; it is demoted because the evidence
+ *   is that most published files are never fetched by an AI search crawler, and
+ *   the vendors that do read it are coding agents. It matters, but not twice as
+ *   much as whether the page has content.
+ * - **Protocols (13)** are all conditional: a site without the surface reports
+ *   N/A and the weight leaves the denominator, so a blog is never marked down
+ *   for lacking an API description.
+ * - **Policy (9)** covers declared usage rights and security contact.
+ *
+ * Checks on draft specifications (`ai-catalog`, `webmcp`, `commerce-discovery`)
+ * stay at 0. Scoring a site against a specification that may be renamed next
+ * quarter would make the number less trustworthy, not more.
  */
 export const CHECK_WEIGHTS: Record<string, number> = {
-  'llms-txt': 11,
-  'robots-txt': 11,
-  'html-rendering': 9,
-  'structured-data': 9,
-  'http-headers': 9,
-  'agent-card': 7,
-  'mcp-discovery': 7,
-  'seo-basics': 7,
-  'security-txt': 6,
-  'meta-tags': 6,
-  'api-discovery': 6,
-  'tls-https': 5,
-  sitemap: 4,
-  'well-known-ai': 3,
-  // Informational in 3.x: reported but does not affect the overall score.
-  // Will gain weight in v4.0 — score-affecting changes are treated as breaking (see CHANGELOG 3.0.0).
-  'content-negotiation': 0,
-  rsl: 0,
-  'agent-access': 0,
-  'crawl-efficiency': 0,
-  'ai-directives': 0,
-  'usage-policy': 0,
-  'http-hygiene': 0,
+  /* Content — is there substance an agent can read? */
+  'html-rendering': 11,
+  'agent-operability': 7,
+  'structured-data': 6,
+  'seo-basics': 5,
+  'content-negotiation': 4,
+
+  /* Discovery — can an agent find the machine-readable entry points? */
+  'robots-txt': 9,
+  'llms-txt': 5,
+  'http-headers': 4,
+  sitemap: 2,
+  'meta-tags': 1,
+
+  /* Access — can an agent actually retrieve it? */
+  'agent-access': 9,
+  'ai-directives': 6,
+  'http-hygiene': 4,
+  'tls-https': 3,
+  'crawl-efficiency': 2,
+
+  /* Policy — what usage rights are declared, and do they agree? */
+  'usage-policy': 4,
+  'security-txt': 3,
+  rsl: 2,
+
+  /* Protocols — what can an agent call? All conditional: N/A when absent. */
+  'api-discovery': 4,
+  'agent-card': 3,
+  'mcp-discovery': 3,
+  'agent-skills': 2,
+  'auth-discovery': 1,
+
+  /* Draft specifications: reported, never scored. */
   'ai-catalog': 0,
-  'agent-skills': 0,
   webmcp: 0,
   'commerce-discovery': 0,
-  'auth-discovery': 0,
-  'agent-operability': 0,
 };
 
 /**
@@ -618,33 +568,36 @@ export const CHECK_WEIGHTS: Record<string, number> = {
  * Mirrors the `CHECK_WEIGHTS` pattern: data lives here, overrides live on the check.
  */
 export const CHECK_CATEGORIES: Record<string, CheckCategory> = {
+  'html-rendering': 'content',
+  'agent-operability': 'content',
+  'structured-data': 'content',
+  'seo-basics': 'content',
+  'content-negotiation': 'content',
+
   'llms-txt': 'discovery',
   'robots-txt': 'discovery',
   'http-headers': 'discovery',
   'meta-tags': 'discovery',
   sitemap: 'discovery',
-  'html-rendering': 'content',
-  'structured-data': 'content',
-  'seo-basics': 'content',
-  'content-negotiation': 'content',
+
   'agent-access': 'access',
+  'ai-directives': 'access',
+  'http-hygiene': 'access',
   'crawl-efficiency': 'access',
   'tls-https': 'access',
-  rsl: 'policy',
+
+  'usage-policy': 'policy',
   'security-txt': 'policy',
+  rsl: 'policy',
+
   'agent-card': 'protocols',
   'mcp-discovery': 'protocols',
   'api-discovery': 'protocols',
-  'well-known-ai': 'protocols',
-  'ai-directives': 'access',
-  'usage-policy': 'policy',
-  'http-hygiene': 'access',
-  'ai-catalog': 'protocols',
   'agent-skills': 'protocols',
+  'auth-discovery': 'protocols',
+  'ai-catalog': 'protocols',
   webmcp: 'protocols',
   'commerce-discovery': 'protocols',
-  'auth-discovery': 'protocols',
-  'agent-operability': 'content',
 };
 
 export const GRADES: Grade[] = [

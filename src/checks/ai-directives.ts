@@ -33,7 +33,6 @@ export const meta: CheckMeta = {
   id: 'ai-directives',
   name: 'AI Directives',
   description: 'Checks page-level robots directives that govern AI answers and summaries',
-  weight: 0, // Informational in 3.x — gains weight in 4.0.
   category: 'access',
 };
 

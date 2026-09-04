@@ -14,7 +14,6 @@ export const meta: CheckMeta = {
   id: 'sitemap',
   name: 'Sitemap',
   description: 'Checks sitemap.xml presence, structure, and freshness',
-  weight: 4,
 };
 
 const MAX_URLS_PER_SITEMAP = 50_000;

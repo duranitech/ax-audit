@@ -126,7 +126,6 @@ export const meta: CheckMeta = {
   id: 'http-headers',
   name: 'HTTP Headers',
   description: 'Checks security headers, AI discovery Link headers, and CORS',
-  weight: 9,
   category: 'discovery',
 };
 

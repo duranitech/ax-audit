@@ -20,7 +20,6 @@ export const meta: CheckMeta = {
   id: 'meta-tags',
   name: 'Meta Tags',
   description: 'Checks AI meta tags, rel="alternate", rel="me", and Open Graph / Twitter Card completeness',
-  weight: 6,
 };
 
 const AI_META_NAMES = ['ai:summary', 'ai:content_type', 'ai:author', 'ai:api', 'ai:agent_card'];

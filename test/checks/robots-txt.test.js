@@ -11,7 +11,7 @@ describe('robots-txt', () => {
     assert.equal(result.findings[0].status, 'fail');
   });
 
-  it('should score well with all core crawlers configured', async () => {
+  it('should score well with the pre-4.0 eight-crawler configuration', async () => {
     const body = [
       'User-agent: GPTBot',
       'Allow: /',
@@ -42,8 +42,10 @@ describe('robots-txt', () => {
 
     const ctx = mockContext({ '/robots.txt': mockResponse({ body }) });
     const result = await check(ctx);
+    // 4.0 scores against twelve core crawlers, so the eight-crawler
+    // configuration that used to be perfect now falls short by design.
     assert.ok(result.score >= 80);
-    assert.ok(result.findings.some(f => f.message.includes('All') && f.message.includes('core AI crawlers')));
+    assert.ok(result.findings.some(f => f.message.includes('core AI crawlers configured')));
   });
 
   it('should penalize missing core crawlers', async () => {
@@ -367,84 +369,82 @@ describe('robots-txt', () => {
   });
 });
 
-describe('robots-txt: 2026 crawler catalogue', () => {
-  const CORE_8 = [
-    'User-agent: GPTBot', 'Allow: /', '',
-    'User-agent: ClaudeBot', 'Allow: /', '',
-    'User-agent: ChatGPT-User', 'Allow: /', '',
-    'User-agent: Claude-SearchBot', 'Allow: /', '',
-    'User-agent: Google-Extended', 'Allow: /', '',
-    'User-agent: PerplexityBot', 'Allow: /', '',
-    'User-agent: OAI-SearchBot', 'Allow: /', '',
-    'User-agent: CCBot', 'Allow: /', '',
-    'Sitemap: https://example.com/sitemap.xml',
+describe('robots-txt: 4.0 scoring against the current catalogue', () => {
+  const CORE_12 = [
+    'GPTBot', 'ClaudeBot', 'Meta-ExternalAgent', 'Google-Extended', 'Applebot-Extended',
+    'Amazonbot', 'Bytespider', 'CCBot', 'OAI-SearchBot', 'Claude-SearchBot',
+    'PerplexityBot', 'ChatGPT-User',
   ];
+  const FULL = [...CORE_12.flatMap(bot => [`User-agent: ${bot}`, 'Allow: /', '']), 'Sitemap: https://example.com/sitemap.xml'];
 
   async function audit(bodyLines) {
     const ctx = mockContext({ '/robots.txt': mockResponse({ body: bodyLines.join('\n') }) });
     return check(ctx);
   }
 
-  it('should still score 100 for the eight-crawler configuration that scored 100 in 3.6', async () => {
-    const result = await audit(CORE_8);
-    assert.equal(result.score, 100, 'the catalogue refresh must not lower an existing perfect score');
+  it('should score 100 only when the full current core set is configured', async () => {
+    assert.equal((await audit(FULL)).score, 100);
   });
 
-  it('should report high-volume crawlers missing from the config without deducting', async () => {
-    const result = await audit(CORE_8);
-    const finding = result.findings.find(f => f.message.includes('high-volume AI crawler'));
-    assert.ok(finding, 'Meta-ExternalAgent and friends should be surfaced');
-    assert.equal(finding.status, 'warn');
+  it('should now deduct for the crawlers the 3.x freeze exempted', async () => {
+    const eightOnly = [
+      'GPTBot', 'ClaudeBot', 'ChatGPT-User', 'Claude-SearchBot',
+      'Google-Extended', 'PerplexityBot', 'OAI-SearchBot', 'CCBot',
+    ];
+    const lines = [...eightOnly.flatMap(b => [`User-agent: ${b}`, 'Allow: /', '']), 'Sitemap: https://example.com/sitemap.xml'];
+    const result = await audit(lines);
+    // 4 of 12 missing → round(4/12 × 30) = 10.
+    assert.equal(result.score, 90, 'the 3.x eight-crawler configuration no longer scores 100');
+  });
+
+  it('should name what each missing crawler costs', async () => {
+    const lines = ['User-agent: GPTBot', 'Allow: /', 'Sitemap: https://example.com/sitemap.xml'];
+    const result = await audit(lines);
+    const finding = result.findings.find(f => f.message.includes('core AI crawlers configured'));
     assert.ok(finding.detail.includes('Meta-ExternalAgent'));
-    assert.ok(finding.hint.includes('4.0'), 'the hint must say when these start counting');
+    assert.ok(finding.detail.includes('Meta AI'), 'each missing crawler should say what it costs');
   });
 
-  it('should not deduct for blocking a crawler added in 3.7', async () => {
-    const withBlock = await audit([...CORE_8, '', 'User-agent: meta-webindexer', 'Disallow: /']);
-    const baseline = await audit(CORE_8);
-    assert.equal(withBlock.score, baseline.score, 'tokens added in 3.7 must not lower a 3.6 score');
+  it('should cost more to block a search crawler than a training one', async () => {
+    const baseline = await audit(FULL);
+    const blockedSearch = await audit([...FULL, '', 'User-agent: meta-webindexer', 'Disallow: /']);
+    const blockedTraining = await audit([...FULL, '', 'User-agent: Timpibot', 'Disallow: /']);
+
+    assert.equal(baseline.score - blockedSearch.score, 5, 'a blocked search crawler removes you from its answers');
+    assert.equal(baseline.score - blockedTraining.score, 2, 'blocking a training crawler is a policy choice');
   });
 
-  it('should still deduct for blocking a crawler 3.6 already knew', async () => {
-    const withBlock = await audit([...CORE_8, '', 'User-agent: Bytespider', 'Disallow: /']);
-    const baseline = await audit(CORE_8);
-    assert.equal(withBlock.score, baseline.score - 3);
+  it('should score crawlers added in 3.7, now that the freeze is gone', async () => {
+    const baseline = await audit(FULL);
+    const withBlock = await audit([...FULL, '', 'User-agent: Amzn-SearchBot', 'Disallow: /']);
+    assert.ok(withBlock.score < baseline.score);
   });
 
   it('should call out blocked search crawlers as a visibility cost', async () => {
-    const result = await audit([...CORE_8, '', 'User-agent: PerplexityBot', 'Disallow: /']);
+    const result = await audit([...FULL, '', 'User-agent: PerplexityBot', 'Disallow: /']);
     const finding = result.findings.find(f => f.message.includes('assistant search crawler'));
     assert.ok(finding);
-    assert.equal(finding.status, 'warn');
     assert.ok(finding.detail.includes('Perplexity answers'));
   });
 
   it('should record blocked training crawlers as a deliberate choice, not a defect', async () => {
-    const result = await audit([...CORE_8, '', 'User-agent: CCBot', 'Disallow: /']);
+    const result = await audit([...FULL, '', 'User-agent: CCBot', 'Disallow: /']);
     const finding = result.findings.find(f => f.message.includes('training crawler(s) blocked'));
-    assert.ok(finding);
-    assert.equal(finding.status, 'pass', 'opting out of training is a policy choice');
+    assert.equal(finding.status, 'pass');
   });
 
   it('should warn when a blocked user-fetcher is documented as ignoring robots.txt', async () => {
-    const result = await audit([...CORE_8, '', 'User-agent: Perplexity-User', 'Disallow: /']);
+    const result = await audit([...FULL, '', 'User-agent: Perplexity-User', 'Disallow: /']);
     const finding = result.findings.find(f => f.message.includes('user-triggered fetcher'));
-    assert.ok(finding);
-    assert.ok(finding.hint.includes('edge'), 'the fix is edge enforcement, not a robots.txt rule');
+    assert.ok(finding.hint.includes('edge'));
   });
 
-  it('should flag rules targeting retired or fictional tokens', async () => {
-    const result = await audit([...CORE_8, '', 'User-agent: GeminiBot', 'Disallow: /', '', 'User-agent: Claude-Web', 'Disallow: /']);
+  it('should flag rules targeting retired or fictional tokens without deducting', async () => {
+    const result = await audit([...FULL, '', 'User-agent: GeminiBot', 'Disallow: /']);
     const finding = result.findings.find(f => f.message.includes('retired or non-existent crawler token'));
     assert.ok(finding);
-    assert.ok(finding.detail.includes('GeminiBot'));
-    assert.ok(finding.detail.includes('Claude-Web'));
     assert.ok(finding.detail.includes('Google-Extended'), 'the fix for GeminiBot is Google-Extended');
-  });
-
-  it('should not deduct for rules targeting retired tokens beyond the frozen list', async () => {
-    const withLegacy = await audit([...CORE_8, '', 'User-agent: GoogleAgent-Mariner', 'Disallow: /']);
-    const baseline = await audit(CORE_8);
-    assert.equal(withLegacy.score, baseline.score);
+    assert.equal(result.score, (await audit(FULL)).score, 'an inert rule is not a defect');
   });
 });
+

@@ -31,7 +31,6 @@ export const meta: CheckMeta = {
   id: 'api-discovery',
   name: 'API Discovery',
   description: 'Checks how agents discover an API description (RFC 9727 catalog, service-desc links, OpenAPI)',
-  weight: 6,
   category: 'protocols',
   aliases: ['openapi'],
 };

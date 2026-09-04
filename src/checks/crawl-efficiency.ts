@@ -7,7 +7,6 @@ export const meta: CheckMeta = {
   id: 'crawl-efficiency',
   name: 'Crawl Efficiency',
   description: 'Checks compression, conditional GET (ETag / Last-Modified), and response size',
-  weight: 0, // Informational in 3.x — will gain weight in v4.0 (score-affecting changes are treated as breaking).
 };
 
 /** Page sizes (decompressed HTML bytes) above this earn a warning. */

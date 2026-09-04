@@ -17,7 +17,6 @@ export const meta: CheckMeta = {
   id: 'rsl',
   name: 'RSL License',
   description: 'Checks Really Simple Licensing (RSL) discovery and license document validity',
-  weight: 0, // Informational in 3.x — will gain weight in v4.0 (score-affecting changes are treated as breaking).
 };
 
 /** Score when discovery exists but the referenced license document cannot be fetched. */

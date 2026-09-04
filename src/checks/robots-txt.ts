@@ -3,8 +3,6 @@ import {
   CONTENT_SIGNALS,
   CONTENT_SIGNAL_USE_VALUES,
   CORE_AI_CRAWLERS,
-  SCORED_CORE_CRAWLERS,
-  SCORED_KNOWN_CRAWLERS_V3,
   crawlerInfo,
   crawlerPurpose,
   legacyCrawlerNote,
@@ -25,7 +23,6 @@ export const meta: CheckMeta = {
   id: 'robots-txt',
   name: 'Robots.txt',
   description: 'Checks AI crawler configuration in robots.txt',
-  weight: 11,
 };
 
 // Re-exported for checks and consumers that were written against the pre-3.7
@@ -58,41 +55,40 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
 
   const isConfigured = (bot: string): boolean => configuredBots.some((b) => b.name.toLowerCase() === bot.toLowerCase());
 
-  // Scoring runs against the frozen 3.x core set; the wider September-2026 set
-  // drives reporting only, so the catalogue refresh cannot lower a score.
-  const coreConfigured = SCORED_CORE_CRAWLERS.filter(isConfigured);
-  const coreMissing = SCORED_CORE_CRAWLERS.filter((bot) => !isConfigured(bot));
+  // 4.0 scores against the current core set. The 3.x freeze that held it at
+  // eight tokens is gone, so the crawlers that gained traffic share in 2026
+  // now count.
+  const coreConfigured = CORE_AI_CRAWLERS.filter(isConfigured);
+  const coreMissing = CORE_AI_CRAWLERS.filter((bot) => !isConfigured(bot));
 
-  if (coreConfigured.length === SCORED_CORE_CRAWLERS.length) {
+  if (coreConfigured.length === CORE_AI_CRAWLERS.length) {
     findings.push({
       status: 'pass',
-      message: `All ${SCORED_CORE_CRAWLERS.length} core AI crawlers explicitly configured`,
+      message: `All ${CORE_AI_CRAWLERS.length} core AI crawlers explicitly configured`,
     });
   } else if (coreConfigured.length > 0) {
     findings.push({
       status: 'warn',
-      message: `${coreConfigured.length}/${SCORED_CORE_CRAWLERS.length} core AI crawlers configured`,
-      detail: `Missing: ${coreMissing.join(', ')}`,
+      message: `${coreConfigured.length}/${CORE_AI_CRAWLERS.length} core AI crawlers configured`,
+      detail: coreMissing.map((bot) => `${bot} — ${crawlerInfo(bot)?.impact ?? 'no explicit rule'}`).join('\n'),
       hint: `Add explicit User-agent entries for the missing crawlers with Allow: / for each one.`,
       learnMoreUrl: guideUrl(meta.id, 'missing-crawlers'),
     });
-    score -= Math.round((coreMissing.length / SCORED_CORE_CRAWLERS.length) * 30);
+    score -= Math.round((coreMissing.length / CORE_AI_CRAWLERS.length) * 30);
   } else {
     findings.push({
       status: 'fail',
       message: 'No core AI crawlers explicitly configured',
-      detail: `Expected: ${SCORED_CORE_CRAWLERS.join(', ')}`,
+      detail: `Expected: ${CORE_AI_CRAWLERS.join(', ')}`,
       hint: 'Add User-agent entries for core AI crawlers in your robots.txt. For each crawler, add: User-agent: <name> followed by Allow: / on the next line.',
       learnMoreUrl: guideUrl(meta.id, 'no-core-crawlers'),
     });
     score -= 40;
   }
 
-  addCurrentCoreFindings(isConfigured, findings);
-
   // Check wildcard blocking unconfigured AI crawlers
   if (wildcardEntry?.disallowed) {
-    const blockedByWildcard = SCORED_CORE_CRAWLERS.filter((bot) => !isConfigured(bot));
+    const blockedByWildcard = CORE_AI_CRAWLERS.filter((bot) => !isConfigured(bot));
     if (blockedByWildcard.length > 0) {
       findings.push({
         status: 'warn',
@@ -116,12 +112,13 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
       hint: 'These crawlers have "Disallow: /" rules. If you want AI agents to access your site, change to "Allow: /" for each blocked crawler.',
       learnMoreUrl: guideUrl(meta.id, 'explicitly-blocked'),
     });
-    // Only tokens 3.6 already knew about deduct, so the 3.7 catalogue refresh
-    // cannot lower an existing score. See SCORED_KNOWN_CRAWLERS_V3.
-    const scoredBlocks = blockedBots.filter((b) =>
-      SCORED_KNOWN_CRAWLERS_V3.some((ai) => ai.toLowerCase() === b.name.toLowerCase()),
-    );
-    score -= scoredBlocks.length * 3;
+    // 4.0 removed the 3.x freeze: every catalogued crawler counts. Search
+    // crawlers cost more than training ones, because blocking a search crawler
+    // removes the site from that assistant's answers while blocking a training
+    // crawler is a policy choice.
+    for (const bot of blockedBots) {
+      score -= crawlerPurpose(bot.name) === 'search' ? 5 : 2;
+    }
   }
 
   addBlockedPurposeFindings(
@@ -185,26 +182,6 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
 }
 
 /* ── Crawler catalogue reporting (informational in 3.x) ────────────────── */
-
-/**
- * Report coverage of the September-2026 core set. Scoring still uses the frozen
- * 3.x set, so this finding is advisory: it names the crawlers that gained
- * material traffic since the scoring set was fixed, chiefly Meta's.
- */
-function addCurrentCoreFindings(isConfigured: (bot: string) => boolean, findings: Finding[]): void {
-  const missing = CORE_AI_CRAWLERS.filter((bot) => !isConfigured(bot) && !SCORED_CORE_CRAWLERS.includes(bot));
-  if (missing.length === 0) return;
-
-  findings.push({
-    status: 'warn',
-    message: `${missing.length} high-volume AI crawler(s) have no explicit rule`,
-    detail: missing.map((bot) => `${bot} — ${crawlerInfo(bot)?.impact ?? 'no explicit rule'}`).join('\n'),
-    hint:
-      'These clients rose to material traffic share after the 3.x scoring set was fixed, so they are reported but not scored. ' +
-      'Add a User-agent group for each one stating your intent explicitly. They gain weight in ax-audit 4.0.',
-    learnMoreUrl: guideUrl(meta.id, 'current-core-crawlers'),
-  });
-}
 
 /**
  * Explain a block in terms of what it costs, grouped by purpose.

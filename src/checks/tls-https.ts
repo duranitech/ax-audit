@@ -15,7 +15,6 @@ export const meta: CheckMeta = {
   id: 'tls-https',
   name: 'TLS / HTTPS',
   description: 'Checks HTTPS, HTTP→HTTPS redirect, and HSTS configuration',
-  weight: 5,
 };
 
 const HSTS_MIN_MAX_AGE = 15_768_000;

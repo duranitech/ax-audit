@@ -42,7 +42,6 @@ export const meta: CheckMeta = {
   id: 'mcp-discovery',
   name: 'MCP Discovery',
   description: 'Checks how AI agents discover this site’s Model Context Protocol server',
-  weight: 7,
   category: 'protocols',
   aliases: ['mcp'],
 };

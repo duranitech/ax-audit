@@ -16,7 +16,6 @@ export const meta: CheckMeta = {
   id: 'seo-basics',
   name: 'SEO Basics',
   description: 'Checks <title>, meta description, canonical, lang, charset, viewport, hreflang',
-  weight: 7,
 };
 
 const TITLE_MIN = 20;
