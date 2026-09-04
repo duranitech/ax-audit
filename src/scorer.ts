@@ -75,9 +75,7 @@ export function categoryScore(results: CheckResult[], category: CheckCategory): 
   });
   if (inCategory.length === 0) return null;
 
-  const metasFor = inCategory
-    .map((r) => metas.get(r.id))
-    .filter((m): m is CheckMeta => m !== undefined);
+  const metasFor = inCategory.map((r) => metas.get(r.id)).filter((m): m is CheckMeta => m !== undefined);
 
   return calculateOverallScore(inCategory, metasFor);
 }

@@ -64,7 +64,6 @@ export function parseCategoryThresholds(raw: string): { thresholds: Map<CheckCat
   return { thresholds };
 }
 
-
 export function cli(argv: string[]): void {
   const program = new Command();
 
