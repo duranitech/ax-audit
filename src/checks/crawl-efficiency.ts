@@ -1,6 +1,7 @@
 import { guideUrl } from '../guide-urls.js';
 import type { CheckContext, CheckResult, CheckMeta, Finding } from '../types.js';
 import { buildResult } from './utils.js';
+import { extractVisibleText } from './html-utils.js';
 
 export const meta: CheckMeta = {
   id: 'crawl-efficiency',
@@ -122,7 +123,81 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
     findings.push({ status: 'pass', message: `Homepage size is reasonable (${formatBytes(bytes)} decompressed)` });
   }
 
+  reportTokenBudget(ctx.html ?? '', findings);
+  reportResponseTime(res.elapsedMs, findings);
+
   return buildResult(meta, score, findings, start);
+}
+
+/* ── Cost in tokens and in time (informational in 3.x) ──────────────────── */
+
+/** Rough characters-per-token ratio for English prose in a byte-pair encoding. */
+const CHARS_PER_TOKEN = 4;
+/** Above this, a page crowds out everything else in an agent's context window. */
+const LARGE_TOKEN_BUDGET = 25_000;
+/** Time to a complete response beyond which agents start timing out or giving up. */
+const SLOW_RESPONSE_MS = 2_000;
+
+/**
+ * Estimate the token cost of the readable content.
+ *
+ * Bytes are the wrong unit for an agent: a page can be small and still expensive
+ * once markup is stripped, or large and cheap. The estimate is a chars-per-token
+ * approximation, stated as such, and it is compared against the whole response
+ * so an operator can see how much of what they send is markup the agent pays to
+ * receive and then discards.
+ */
+export function reportTokenBudget(html: string, findings: Finding[]): void {
+  if (html.length === 0) return;
+
+  const text = extractVisibleText(html);
+  const contentTokens = Math.round(text.length / CHARS_PER_TOKEN);
+  const wireTokens = Math.round(html.length / CHARS_PER_TOKEN);
+  const markupShare = wireTokens > 0 ? Math.round((1 - contentTokens / wireTokens) * 100) : 0;
+
+  if (contentTokens > LARGE_TOKEN_BUDGET) {
+    findings.push({
+      status: 'warn',
+      message: `Homepage carries roughly ${contentTokens.toLocaleString('en-US')} tokens of readable content`,
+      detail: 'Estimated at four characters per token.',
+      hint:
+        'A page this large crowds out everything else in an agent\u2019s context window, so it reads the beginning and ' +
+        'gives up. Split it, or serve a Markdown representation.',
+      learnMoreUrl: guideUrl(meta.id, 'large-token-budget'),
+    });
+    return;
+  }
+
+  findings.push({
+    status: markupShare > 90 ? 'warn' : 'pass',
+    message: `Roughly ${contentTokens.toLocaleString('en-US')} tokens of content in ${wireTokens.toLocaleString('en-US')} tokens of response (${markupShare}% markup)`,
+    detail: 'Estimated at four characters per token.',
+    ...(markupShare > 90
+      ? {
+          hint: 'An agent pays to receive the markup and then discards it. Serving Markdown on Accept negotiation is the direct fix.',
+          learnMoreUrl: guideUrl(meta.id, 'markup-overhead'),
+        }
+      : {}),
+  });
+}
+
+/** Report how long the origin took, since agents give up sooner than people do. */
+export function reportResponseTime(elapsedMs: number | undefined, findings: Finding[]): void {
+  if (elapsedMs === undefined) return;
+
+  if (elapsedMs > SLOW_RESPONSE_MS) {
+    findings.push({
+      status: 'warn',
+      message: `Homepage took ${elapsedMs}ms to respond`,
+      hint:
+        'Agents crawl on tighter timeouts than browsers and rarely retry. A slow page is not a slow page to them, it ' +
+        'is a missing one.',
+      learnMoreUrl: guideUrl(meta.id, 'slow-response'),
+    });
+    return;
+  }
+
+  findings.push({ status: 'pass', message: `Homepage responded in ${elapsedMs}ms` });
 }
 
 function formatBytes(bytes: number): string {

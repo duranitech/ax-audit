@@ -145,3 +145,107 @@ describe('structured-data', () => {
     assert.ok(result.findings.some(f => f.message.includes('2 JSON-LD block(s)')));
   });
 });
+
+describe('structured-data: provenance and freshness', () => {
+  const ld = (data) =>
+    `<html><head><script type="application/ld+json">${JSON.stringify(data)}</script></head><body><main>${'Real content here. '.repeat(30)}</main></body></html>`;
+
+  const BASE = {
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline: 'How agents read the web',
+    author: { '@type': 'Person', name: 'Ada Lovelace', sameAs: 'https://www.wikidata.org/wiki/Q7259' },
+    publisher: { '@type': 'Organization', name: 'Acme' },
+    dateModified: new Date(Date.now() - 10 * 86400000).toISOString().slice(0, 10),
+  };
+
+  it('should report authorship and sameAs links', async () => {
+    const result = await check(mockContext({}, { html: ld(BASE) }));
+    assert.ok(result.findings.some((f) => f.message.includes('Authorship declared: Ada Lovelace')));
+    const sameAs = result.findings.find((f) => f.message.includes('sameAs link(s)'));
+    assert.ok(sameAs);
+    assert.ok(sameAs.detail.includes('wikidata'));
+  });
+
+  it('should explain what sameAs is for when it is absent', async () => {
+    const { author, ...rest } = BASE;
+    void author;
+    const result = await check(mockContext({}, { html: ld(rest) }));
+    const finding = result.findings.find((f) => f.message === 'No sameAs links');
+    assert.ok(finding);
+    assert.ok(finding.hint.includes('turns a name into an entity'));
+  });
+
+  it('should warn when an author has no publisher', async () => {
+    const { publisher, ...rest } = BASE;
+    void publisher;
+    const result = await check(mockContext({}, { html: ld(rest) }));
+    assert.ok(result.findings.some((f) => f.message.includes('Author declared but no publisher')));
+  });
+
+  it('should note disambiguating organization detail', async () => {
+    const data = { ...BASE, publisher: { '@type': 'Organization', name: 'Acme', legalAddress: 'x' } };
+    const result = await check(mockContext({}, { html: ld(data) }));
+    assert.ok(result.findings.some((f) => f.message.includes('disambiguating detail')));
+  });
+
+  it('should report a recent date as fresh', async () => {
+    const result = await check(mockContext({}, { html: ld(BASE) }));
+    const finding = result.findings.find((f) => f.message.includes('Content last dated'));
+    assert.equal(finding.status, 'pass');
+  });
+
+  it('should warn about content over two years old', async () => {
+    const old = { ...BASE, dateModified: '2020-01-01' };
+    const result = await check(mockContext({}, { html: ld(old) }));
+    const finding = result.findings.find((f) => f.message.includes('Content last dated'));
+    assert.equal(finding.status, 'warn');
+    assert.ok(finding.hint.includes('answering with stale facts'));
+  });
+
+  it('should warn about a future date', async () => {
+    const future = { ...BASE, dateModified: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10) };
+    const result = await check(mockContext({}, { html: ld(future) }));
+    assert.ok(result.findings.some((f) => f.message.includes('is in the future')));
+  });
+
+  it('should warn about an unparseable date', async () => {
+    const bad = { ...BASE, dateModified: 'last Tuesday' };
+    const result = await check(mockContext({}, { html: ld(bad) }));
+    assert.ok(result.findings.some((f) => f.message.includes('not a parseable date')));
+  });
+
+  it('should warn when no date is declared at all', async () => {
+    const { dateModified, ...rest } = BASE;
+    void dateModified;
+    const result = await check(mockContext({}, { html: ld(rest) }));
+    const finding = result.findings.find((f) => f.message.includes('No dateModified or datePublished'));
+    assert.ok(finding.hint.includes('cannot be weighed at all'));
+  });
+
+  it('should confirm markup that matches the visible text', async () => {
+    const html = `<html><head><script type="application/ld+json">${JSON.stringify(BASE)}</script></head><body><main><h1>How agents read the web</h1>${'Content. '.repeat(30)}</main></body></html>`;
+    const result = await check(mockContext({}, { html }));
+    assert.ok(result.findings.some((f) => f.message.includes('appear in the visible text')));
+  });
+
+  it('should flag markup describing a page that is not there', async () => {
+    const result = await check(mockContext({}, { html: ld(BASE) }));
+    const finding = result.findings.find((f) => f.message.includes('do not appear in the visible text'));
+    assert.ok(finding);
+    assert.ok(finding.hint.includes('oldest form of spam'));
+    assert.ok(finding.hint.includes('rendered by script'), 'the caveat about client rendering must be stated');
+  });
+
+  it('should keep every new finding informational in 3.x', async () => {
+    // Same entity types and graph shape; only the freshness field differs, so
+    // any score delta would have to come from the new findings. Dropping the
+    // author or publisher would also drop key entity types, which 3.6 already
+    // scored.
+    const rich = await check(mockContext({}, { html: ld(BASE) }));
+    const { dateModified, ...stripped } = BASE;
+    void dateModified;
+    const bare = await check(mockContext({}, { html: ld(stripped) }));
+    assert.equal(rich.score, bare.score, 'provenance and freshness must not move the score in 3.x');
+  });
+});

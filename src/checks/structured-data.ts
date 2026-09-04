@@ -1,4 +1,5 @@
 import { guideUrl } from '../guide-urls.js';
+import { extractVisibleText } from './html-utils.js';
 import type { CheckContext, CheckResult, CheckMeta, Finding } from '../types.js';
 import { buildResult } from './utils.js';
 
@@ -128,7 +129,230 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
     score -= 5;
   }
 
+  // Informational in 3.x: new findings inside a weighted check must not deduct.
+  reportProvenance(parsed, findings);
+  reportFreshness(parsed, findings);
+  reportVisibleTextAgreement(parsed, html, findings);
+
   return buildResult(meta, score, findings, start);
+}
+
+/* ── Provenance and freshness (informational in 3.x) ────────────────────── */
+
+/** Walk a JSON-LD tree, yielding every object node. */
+function* nodes(value: unknown, depth = 0): Generator<Record<string, unknown>> {
+  if (depth > 8 || value === null || typeof value !== 'object') return;
+  if (Array.isArray(value)) {
+    for (const item of value) yield* nodes(item, depth + 1);
+    return;
+  }
+  const obj = value as Record<string, unknown>;
+  yield obj;
+  for (const child of Object.values(obj)) yield* nodes(child, depth + 1);
+}
+
+/** Read a property that may be a string, an object with a name, or a list of either. */
+function readNames(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap(readNames);
+  if (value !== null && typeof value === 'object') {
+    const name = (value as Record<string, unknown>).name;
+    return typeof name === 'string' ? [name] : [];
+  }
+  return [];
+}
+
+/**
+ * Who wrote this, and can it be tied to an entity that exists elsewhere?
+ *
+ * An assistant deciding whether to cite a page weighs where it came from. A
+ * byline with no `sameAs` is a string; a byline linked to Wikidata, an ORCID or
+ * a company page is an entity a model can already have an opinion about.
+ */
+function reportProvenance(parsed: Record<string, unknown>[], findings: Finding[]): void {
+  const authors = new Set<string>();
+  const sameAs = new Set<string>();
+  let publisher = false;
+  let organizationDetail = false;
+
+  for (const root of parsed) {
+    for (const node of nodes(root)) {
+      for (const name of readNames(node.author)) authors.add(name);
+      if (node.publisher !== undefined) publisher = true;
+      for (const url of readNames(node.sameAs)) sameAs.add(url);
+      if (Array.isArray(node.sameAs)) {
+        for (const url of node.sameAs) if (typeof url === 'string') sameAs.add(url);
+      } else if (typeof node.sameAs === 'string') {
+        sameAs.add(node.sameAs);
+      }
+      if (
+        node.companyRegistration !== undefined ||
+        node.legalAddress !== undefined ||
+        node.contactPoint !== undefined
+      ) {
+        organizationDetail = true;
+      }
+    }
+  }
+
+  if (authors.size > 0) {
+    findings.push({ status: 'pass', message: `Authorship declared: ${[...authors].slice(0, 3).join(', ')}` });
+  } else {
+    findings.push({
+      status: 'warn',
+      message: 'No author declared in structured data',
+      hint:
+        'An assistant deciding whether to cite a page weighs where it came from. Add author as a Person or ' +
+        'Organization, not a bare string.',
+      learnMoreUrl: guideUrl(meta.id, 'no-author'),
+    });
+  }
+
+  if (sameAs.size > 0) {
+    findings.push({
+      status: 'pass',
+      message: `${sameAs.size} sameAs link(s) tie your entity to external identifiers`,
+      detail: [...sameAs].slice(0, 4).join(', '),
+    });
+  } else {
+    findings.push({
+      status: 'warn',
+      message: 'No sameAs links',
+      hint:
+        'sameAs is what turns a name into an entity. Link your Organization or Person to Wikidata, LinkedIn, GitHub ' +
+        'or Crunchbase so a model can connect this page to what it already knows.',
+      learnMoreUrl: guideUrl(meta.id, 'no-same-as'),
+    });
+  }
+
+  if (!publisher && authors.size > 0) {
+    findings.push({
+      status: 'warn',
+      message: 'Author declared but no publisher',
+      hint: 'Declare publisher as well, so a citation can name the outlet as well as the writer.',
+      learnMoreUrl: guideUrl(meta.id, 'no-publisher'),
+    });
+  }
+
+  if (organizationDetail) {
+    findings.push({
+      status: 'pass',
+      message: 'Organization carries disambiguating detail (registration, legal address or contact point)',
+    });
+  }
+}
+
+/** Freshness buckets, in days. */
+const FRESH_DAYS = 90;
+const STALE_DAYS = 730;
+
+/**
+ * When did this page last change?
+ *
+ * Assistants answering time-sensitive questions weigh recency, and a page with
+ * no date at all cannot be weighed. The check reports rather than penalises:
+ * an evergreen reference page is legitimately old.
+ */
+function reportFreshness(parsed: Record<string, unknown>[], findings: Finding[]): void {
+  const dates: { field: string; value: Date }[] = [];
+
+  for (const root of parsed) {
+    for (const node of nodes(root)) {
+      for (const field of ['dateModified', 'datePublished', 'uploadDate']) {
+        const raw = node[field];
+        if (typeof raw !== 'string') continue;
+        const parsedDate = new Date(raw);
+        if (Number.isNaN(parsedDate.getTime())) {
+          findings.push({
+            status: 'warn',
+            message: `${field} is not a parseable date: "${raw}"`,
+            hint: 'Use ISO 8601, for example 2026-09-04 or 2026-09-04T12:00:00Z.',
+            learnMoreUrl: guideUrl(meta.id, 'invalid-date'),
+          });
+          continue;
+        }
+        dates.push({ field, value: parsedDate });
+      }
+    }
+  }
+
+  if (dates.length === 0) {
+    findings.push({
+      status: 'warn',
+      message: 'No dateModified or datePublished in structured data',
+      hint:
+        'Assistants weigh recency when they answer time-sensitive questions, and a page with no date cannot be ' +
+        'weighed at all. Add dateModified to anything that changes.',
+      learnMoreUrl: guideUrl(meta.id, 'no-dates'),
+    });
+    return;
+  }
+
+  const newest = dates.reduce((a, b) => (a.value > b.value ? a : b));
+  const days = Math.round((Date.now() - newest.value.getTime()) / 86_400_000);
+
+  if (days < 0) {
+    findings.push({
+      status: 'warn',
+      message: `${newest.field} is in the future (${newest.value.toISOString().slice(0, 10)})`,
+      hint: 'A future date reads as a mistake or as manipulation. Use the real modification time.',
+      learnMoreUrl: guideUrl(meta.id, 'future-date'),
+    });
+    return;
+  }
+
+  findings.push({
+    status: days > STALE_DAYS ? 'warn' : 'pass',
+    message: `Content last dated ${newest.value.toISOString().slice(0, 10)} (${days} days ago)`,
+    ...(days > STALE_DAYS
+      ? {
+          hint: 'Over two years without a recorded update. If the page is still accurate, refresh dateModified so an assistant knows that; if it is not, it is answering with stale facts.',
+          learnMoreUrl: guideUrl(meta.id, 'stale-content'),
+        }
+      : days < FRESH_DAYS
+        ? {}
+        : { detail: 'Fine for reference material; worth refreshing on anything time-sensitive.' }),
+  });
+}
+
+/**
+ * Google's one explicit ask about structured data and AI features is that it
+ * match the visible text. Markup describing a page that is not there is the
+ * oldest form of spam, and it is now graded by systems that quote it.
+ */
+function reportVisibleTextAgreement(parsed: Record<string, unknown>[], html: string, findings: Finding[]): void {
+  const visible = extractVisibleText(html).toLowerCase();
+  if (visible.length < 200) return;
+
+  const claims: { field: string; value: string }[] = [];
+  for (const root of parsed) {
+    for (const node of nodes(root)) {
+      for (const field of ['headline', 'name']) {
+        const value = node[field];
+        if (typeof value === 'string' && value.length >= 12 && value.length <= 110) {
+          claims.push({ field, value });
+        }
+      }
+    }
+  }
+  if (claims.length === 0) return;
+
+  const missing = claims.filter((c) => !visible.includes(c.value.toLowerCase())).slice(0, 3);
+  if (missing.length === 0) {
+    findings.push({ status: 'pass', message: 'Structured-data headings appear in the visible text' });
+    return;
+  }
+
+  findings.push({
+    status: 'warn',
+    message: `${missing.length} structured-data value(s) do not appear in the visible text`,
+    detail: missing.map((c) => `${c.field}: "${c.value}"`).join('\n'),
+    hint:
+      'Google\u2019s one explicit requirement for structured data and AI features is that it match what a reader sees. ' +
+      'Markup describing a page that is not there is the oldest form of spam, and it is now graded by systems that ' +
+      'quote it. Note this compares the static HTML, so text rendered by script will read as missing here too.',
+    learnMoreUrl: guideUrl(meta.id, 'markup-mismatch'),
+  });
 }
 
 function unescapeHtml(str: string): string {

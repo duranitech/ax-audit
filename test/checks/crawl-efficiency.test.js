@@ -120,3 +120,72 @@ describe('crawl-efficiency', () => {
     assert.ok(result.score >= 0 && result.score <= 100);
   });
 });
+
+describe('crawl-efficiency: token budget and response time', () => {
+  const headers = { 'content-encoding': 'br', etag: '"v1"' };
+
+  function ctxWith(html, elapsedMs = 120) {
+    return mockContext(
+      {
+        'https://example.com': (url, options) =>
+          mockResponse({
+            body: html,
+            headers: options?.headers?.['If-None-Match'] ? {} : headers,
+            status: options?.headers?.['If-None-Match'] ? 304 : 200,
+            ok: !options?.headers?.['If-None-Match'],
+            elapsedMs,
+            url,
+          }),
+      },
+      { html },
+    );
+  }
+
+  it('should report content tokens against wire tokens', async () => {
+    const html = `<html><body><main>${'Readable content here. '.repeat(50)}</main></body></html>`;
+    const result = await check(ctxWith(html));
+    const finding = result.findings.find((f) => f.message.includes('tokens of content in'));
+    assert.ok(finding);
+    assert.ok(finding.detail.includes('four characters per token'), 'the estimate must be stated as an estimate');
+  });
+
+  it('should warn when almost all of the response is markup', async () => {
+    const html = `<html><body>${'<div class="a b c d e f g h i j"></div>'.repeat(400)}<p>Hi</p></body></html>`;
+    const result = await check(ctxWith(html));
+    const finding = result.findings.find((f) => f.message.includes('% markup'));
+    assert.equal(finding.status, 'warn');
+    assert.ok(finding.hint.includes('pays to receive the markup and then discards it'));
+  });
+
+  it('should warn about a page too large for a context window', async () => {
+    const html = `<html><body><main>${'word '.repeat(30000)}</main></body></html>`;
+    const result = await check(ctxWith(html));
+    const finding = result.findings.find((f) => f.message.includes('tokens of readable content'));
+    assert.ok(finding);
+    assert.ok(finding.hint.includes('crowds out everything else'));
+  });
+
+  it('should report a fast response', async () => {
+    const result = await check(ctxWith('<html><body><main>Hi</main></body></html>', 120));
+    assert.ok(result.findings.some((f) => f.message.includes('responded in 120ms')));
+  });
+
+  it('should warn about a slow one, in agent terms', async () => {
+    const result = await check(ctxWith('<html><body><main>Hi</main></body></html>', 4500));
+    const finding = result.findings.find((f) => f.message.includes('took 4500ms'));
+    assert.ok(finding);
+    assert.ok(finding.hint.includes('it is a missing one'));
+  });
+
+  it('should stay silent when the timing is unknown', async () => {
+    // A default parameter would swallow an explicit undefined, so build the
+    // context directly to prove the check tolerates a missing timing.
+    const html = '<html><body><main>Hi</main></body></html>';
+    const noTiming = mockContext(
+      { 'https://example.com': mockResponse({ body: html, headers: { 'content-encoding': 'br', etag: '"v1"' } }) },
+      { html },
+    );
+    const result = await check(noTiming);
+    assert.ok(!result.findings.some((f) => f.message.includes('Homepage responded in')));
+  });
+});
