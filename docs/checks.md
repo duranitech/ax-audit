@@ -1,6 +1,10 @@
 # Checks Reference
 
-ax-audit runs 18 checks. Fourteen are **weighted** (summing to 100% of the overall score); four are **informational** in 3.x — they run and report findings but carry weight 0 until v4.0, because score-affecting changes are treated as breaking (see [CHANGELOG 3.0.0](../CHANGELOG.md)).
+ax-audit runs 26 checks. Fourteen are **weighted** (summing to 100% of the overall score); twelve are **informational** in 3.x — they run and report findings but carry weight 0 until v4.0, because score-affecting changes are treated as breaking (see [CHANGELOG 3.0.0](../CHANGELOG.md)).
+
+Checks are grouped into five areas, and reports are ordered by them: **content** (is there substance an agent can read?), **discovery** (can an agent find your machine-readable files?), **access** (can it actually retrieve them?), **policy** (what usage rights do you declare?), and **protocols** (what can an agent call?).
+
+Some checks are **conditional**. A blog has no commerce profile to publish and nothing to authorize, so those checks report **n/a** and are excluded from the score rather than counted as failures. Everything counted against a site is something the site could have done.
 
 Every probed path is labelled by standing — **IANA-registered**, **vendor convention**, **draft**, or **legacy** — because the agent web mixes registered URIs with drafts that get renamed. A missing draft file is not the same kind of finding as a missing registered one, and reports say which is which.
 
@@ -350,6 +354,140 @@ The probe is unsigned and comes from the auditor's own network, so an edge that 
 
 ---
 
+### `ai-directives` — page-level AI controls
+
+The controls Google and Microsoft document that they honor, read from robots meta tags and `X-Robots-Tag` (including the user-agent-scoped header form).
+
+| Condition | Points |
+| --- | --- |
+| Homepage HTML unavailable | **hard fail → 0** |
+| `noindex` or `none` | **hard fail → 0** — invisible to every search-grounded assistant |
+| `nosnippet`, or `max-snippet:0` | −30 — excluded as a direct input to Google AI Overviews and AI Mode |
+| `noarchive` | −30 — excluded from Microsoft Copilot grounding |
+| `nocache` | −10 — Copilot may use only the URL, title and snippet |
+| `data-nosnippet` wrapping `<main>`, `<article>` or `<body>` | −20 |
+| `noimageindex` | −5 |
+| `max-snippet:[n]` under 160 | warn only, 0 |
+| `noai` / `noimageai` | reported, 0 — no major operator documents honoring them |
+| robots.txt disallows `Google-Extended` with no snippet directive set | warn only, 0 |
+
+That last row is the finding this check exists for. `Google-Extended` governs Gemini training and grounding in Gemini Apps and Vertex AI, **not** AI Overviews, which follow Googlebot and the snippet directives. A site that disallows it expecting to leave AI Overviews has opted out of the thing it probably did not mind.
+
+### `usage-policy` — do your usage signals agree?
+
+Normalises every machine-readable usage declaration onto three questions — may you train on it, ground an answer in it, index it — and reports where they disagree.
+
+| Mechanism | Training | Grounding | Search |
+| --- | --- | --- | --- |
+| Content Signals (robots.txt or header) | `ai-train=yes\|no` | `ai-input=yes\|no` | `search=yes\|no` |
+| IETF AIPREF (robots.txt or header) | `train-ai=y\|n` | *(no category yet)* | `search=y\|n` |
+| RSL licence | `ai-train` | `ai-input` | `ai-index`, `search` |
+| TDMRep (meta > header > well-known) | `tdm-reservation: 0\|1` | — | — |
+| robots meta | `noai` | — | — |
+
+| Condition | Points |
+| --- | --- |
+| No declaration of any kind | **→ 40** |
+| Two mechanisms give opposite answers on one dimension | −25 per dimension |
+| `Content-Usage` header outside the AIPREF vocabulary | warn only, 0 |
+| A dimension no declaration covers | warn only, 0 |
+
+Every report states that only robots.txt access rules are documented as honored by major AI operators. The rest are declarations whose weight is legal rather than technical.
+
+### `http-hygiene` — status-code honesty
+
+| Condition | Points |
+| --- | --- |
+| A nonexistent path returns 200 | −30 |
+| A nonexistent path redirects | −20 |
+| A 429 with no `Retry-After` | −20 |
+| A 429 with `Retry-After` on the second request | −10 |
+| `HEAD` refused (405/501) | −10 |
+| Over one redirect hop to the homepage | −10 |
+| No `Content-Type` header | −10 |
+| No charset in the header or the document | −10 |
+| `<html lang>` disagrees with `Content-Language` | −5 |
+| A nonexistent path returns 403/401 | −5 |
+| Empty 404 body | −5 |
+| The 404 probe was challenged by bot management | warn only, 0 |
+
+### `ai-catalog` — the index of everything callable
+
+Discovery, in the order Lighthouse's `ard-schema` audit uses: robots.txt `Agentmap:`, `Link: rel="ai-catalog"`, `<link rel="ai-catalog">`, then `/.well-known/ai-catalog.json` and `/.well-known/ard.json`. Both specifications are drafts, so absence warns and scores nothing.
+
+| Condition | Points |
+| --- | --- |
+| Catalog is not valid JSON | **→ 10** |
+| An entry points at a document that cannot be fetched | −15 each |
+| No entries | −20 |
+| Entry missing identifier, type, or url/data | −10 |
+| No `specVersion` / no `host` | −5 each |
+| Entry served with a different media type than declared | −5 |
+
+### `agent-skills` — installable procedures
+
+Conditional: **n/a** unless the site has a developer-facing surface (documentation links, llms.txt, or an API description). Probes `/.well-known/agent-skills/index.json`, `/.well-known/skills/index.json`, then `/skill.md`.
+
+| Condition | Points |
+| --- | --- |
+| Index is not valid JSON | **→ 10** |
+| A sampled skill is unreachable, or its frontmatter name disagrees with the index | −10 per problem |
+| Index lists no skills | −30 |
+| A skill has no description | −15 |
+| No entry carries a url | −15 |
+| A skill name is outside `[a-z0-9-]{1,64}` | −10 |
+| Malformed digest, unknown type, over-long description, or no `$schema` | −5 each |
+| No skill declares a digest | −5 |
+| A single `/skill.md` with no index | −20 |
+
+### `webmcp` — forms as callable tools
+
+Conditional: **n/a** on a page with no forms and no WebMCP code. Never asks for WebMCP — it is a Community Group draft in a Chrome origin trial.
+
+| Condition | Points |
+| --- | --- |
+| `toolname` with no `tooldescription`, or the reverse | −30 |
+| Parameters with no `toolparamdescription` | −15 |
+| Tool name is not a usable identifier | −10 |
+| Deprecated `navigator.modelContext` namespace | −10 |
+| Forms present, none annotated | warn only, 0 |
+
+### `commerce-discovery` — Universal Commerce Protocol
+
+Conditional: **n/a** unless the page shows storefront signals. A lone `Offer` is a price statement, not a catalog, so it counts only alongside a cart link.
+
+| Condition | Points |
+| --- | --- |
+| Profile requires authentication | **hard fail → 0** |
+| Profile is not valid JSON | **→ 10** |
+| No `ucp` object | **→ 20** |
+| No services declared | −25 |
+| A declared schema URL cannot be fetched | −20 |
+| No version | −20 |
+| No payment handlers | −15 |
+| Version is not a specification date | −10 |
+| No signing keys | −10 |
+| No schema URL declared | −10 |
+| Service name not in reverse-DNS form, unnamed handler | −5 each |
+
+The OpenAI and Stripe Agentic Commerce Protocol defines no manifest, and AP2 advertises through an A2A card extension, so neither is probed.
+
+### `auth-discovery` — can an agent get credentials?
+
+Conditional: **n/a** unless the site exposes an API description, API catalog, MCP server card or commerce profile. Follows the RFC 9728 chain from `WWW-Authenticate` or `/.well-known/oauth-protected-resource` to the authorization server's RFC 8414 or OpenID metadata.
+
+| Condition | Points |
+| --- | --- |
+| Metadata names no authorization server | **→ 40** |
+| Authorization server publishes no discovery metadata | −30 |
+| Invalid issuer URL | −25 |
+| Missing `issuer`, `authorization_endpoint` or `token_endpoint` | −15 each |
+| No PKCE with `S256` | −15 |
+| No dynamic registration and no Client ID Metadata Documents | −10 |
+| No `resource` identifier | −10 |
+
+---
+
 ## Overall scoring model
 
 Each check returns 0–100. The overall score is the weighted average across the checks that ran:
@@ -359,6 +497,8 @@ overall = round( Σ (score_i / 100 × weight_i) / Σ weight_i × 100 )
 ```
 
 When every selected check has weight 0 (e.g. `--checks rsl`), the overall falls back to a plain average of check scores.
+
+Checks reporting `applicable: false` are excluded from both the numerator and the denominator. A check whose meta exists but produced no result — because it crashed — still counts at full weight, so a broken check cannot inflate a score by shrinking the denominator.
 
 | Grade | Score | Exit code |
 | --- | --- | --- |

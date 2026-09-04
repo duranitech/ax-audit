@@ -2,6 +2,44 @@
 
 All notable changes to ax-audit are documented here.
 
+## [3.8.0] - 2026-09-04
+
+Eight new checks, all weight 0, plus the reporting machinery they need. Where 3.7 corrected what ax-audit was looking for, 3.8 covers the signals it was not looking at.
+
+### Added — reporting
+
+- **Not-applicable checks.** A commerce-protocol check scoring zero on a personal blog says the blog is badly built; the honest answer is that the question does not arise. `CheckResult.applicable: false` excludes a check from both numerator and denominator, and reports render it as `n/a`. Everything counted against a site is now something the site could have done. A check whose meta exists but produced no result — because it crashed — still counts at full weight, so a broken check cannot inflate a score.
+- **Category grouping.** Terminal, Markdown and HTML output group checks under content, discovery, access, policy and protocols. Twenty-six scores in a flat list do not tell a reader where the problem is.
+- **`renderHtml` / `renderBatchHtml`**, returning the document as a string the way `renderMarkdown` already did. The HTML reporter could previously only print to stdout, which made it untestable and unusable from the programmatic API.
+
+### Added — checks
+
+- **ai-directives**: the page-level controls Google and Microsoft document that they honor — `nosnippet` and `max-snippet` for AI Overviews and AI Mode, `noarchive` and `nocache` for Copilot grounding, `data-nosnippet` judged by what it wraps. The finding it exists for: a site that disallows `Google-Extended` expecting to leave AI Overviews has done no such thing, because that token governs Gemini training and grounding while AI Overviews follow Googlebot and the snippet directives.
+- **usage-policy**: normalises Content Signals, AIPREF, RSL, TDMRep and `noai` onto three questions — train, ground, index — and reports where they disagree. A site whose robots.txt permits training while its RSL licence prohibits it has published two contradictory positions, and which one applies depends on which file a crawler read. Every report states that only robots.txt access rules are documented as honored by major operators.
+- **http-hygiene**: status-code honesty. An agent cannot see that the 200 it received is a "page not found" screen; it stores the apology as the answer. Also redirect depth, `HEAD` support, `Retry-After` on 429, charset, and `<html lang>` against `Content-Language`.
+- **ai-catalog**: the emerging single index of everything callable on a site, discovered the four ways Lighthouse's own audit accepts. Both specifications are drafts, so absence never scores — but a catalog whose entries point at documents that 404 does, because an agent trusts it before it fetches.
+- **agent-skills**: installable procedures (SKILL.md) across all three competing discovery paths, validating the index and fetching a sample of the documents. Conditional on the site having a developer-facing surface.
+- **webmcp**: forms declared as callable tools. Never asks for WebMCP, which is a Community Group draft in a Chrome origin trial; catches the mistakes static analysis can catch with certainty on pages that adopted it.
+- **commerce-discovery**: the Universal Commerce Protocol profile, the one agentic-commerce specification with published site-side discovery. Validates the profile and resolves the schema URLs it promises. The alternatives define no manifest, and the report says so rather than inventing paths.
+- **auth-discovery**: the RFC 9728 chain from `WWW-Authenticate` to the authorization server's metadata. A human hitting a 401 reads the documentation; an agent cannot.
+
+### Added — infrastructure
+
+- `checks/frontmatter.ts`: a focused YAML frontmatter reader for SKILL.md and Markdown mirrors. ax-audit has two runtime dependencies and will not grow a YAML parser, so the reader handles the flat `key: value` block these documents use and records anything more elaborate as skipped rather than guessing.
+
+### Fixed
+
+- **A lone `Offer` is a price, not a storefront.** Found by running commerce-discovery against a real SaaS site, which was told to build a commerce integration because it prices its plans with structured data. A bare `Offer` now counts only alongside a second signal such as a cart link.
+- `buildResult` falls back to `CHECK_CATEGORIES`, so every result carries its category in JSON output too. Previously only checks setting `meta.category` explicitly did, leaving JSON consumers to reimplement the fallback the other reporters already had.
+
+### Scoring
+
+Unchanged. All eight checks carry weight 0 and gain weight in 4.0.
+
+### Tests
+
+755 total, up from 553. New suites: ai-directives, usage-policy, http-hygiene, ai-catalog, agent-skills, webmcp, commerce-discovery, auth-discovery, frontmatter, and the N/A arithmetic including the crashed-check case.
+
 ## [3.7.0] - 2026-09-04
 
 A correction release. Three checks were probing paths that are no longer, or never were, the standard, and the crawler catalogue had drifted far enough to contain tokens that do not exist. Everything here was re-verified against vendor documentation, IANA, IETF datatracker and the relevant specification repositories on 2026-09-04.

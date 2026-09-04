@@ -42,7 +42,7 @@ AI agents and LLMs are increasingly crawling, indexing, and interacting with web
 
 ## What it checks
 
-18 checks — 14 weighted, 4 informational. Full reference: **[docs/checks.md](docs/checks.md)**.
+26 checks across five areas — 14 weighted, 12 informational. Full reference: **[docs/checks.md](docs/checks.md)**.
 
 | Check | Weight | Check | Weight |
 |---|---|---|---|
@@ -56,6 +56,10 @@ AI agents and LLMs are increasingly crawling, indexing, and interacting with web
 | SEO Basics | 7% | [RSL License](https://rslstandard.org) · Agent Access (blocking / cloaking) · Crawl Efficiency | 0%* |
 
 \* Informational in 3.x: reported in full, no effect on the score. Weighted in v4.0.
+
+**Also checked, informational in 3.x** — AI Directives (the `nosnippet` / `noarchive` controls Google and Microsoft honor for AI answers) · Usage Policy (whether your Content Signals, AIPREF, RSL and TDMRep declarations agree with each other) · HTTP Hygiene (soft 404s, redirect depth, `Retry-After`, charset) · AI Catalog · Agent Skills · WebMCP · Commerce Discovery ([UCP](https://developers.google.com/merchant/ucp/guides/ucp-profile)) · Auth Discovery ([RFC 9728](https://www.rfc-editor.org/rfc/rfc9728.html)).
+
+Checks that do not apply to a site — a commerce profile on a blog, OAuth metadata where nothing needs authorizing — report **n/a** and are excluded from the score rather than counted as failures.
 
 Every finding links to a step-by-step **[remediation guide](https://lucioduran.com/projects/ax-audit/guides)**.
 
