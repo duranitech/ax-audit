@@ -1,4 +1,4 @@
-import { CORE_AI_CRAWLERS } from '../constants.js';
+import { PROBEABLE_CORE_CRAWLERS } from '../constants.js';
 import { guideUrl } from '../guide-urls.js';
 import type { CheckContext, CheckResult, CheckMeta, Finding } from '../types.js';
 import { buildResult } from './utils.js';
@@ -52,7 +52,7 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
 
   const outcomes = new Map<string, Outcome>();
 
-  for (const crawler of CORE_AI_CRAWLERS) {
+  for (const crawler of PROBEABLE_CORE_CRAWLERS) {
     const res = await ctx.fetch(ctx.url, { headers: { 'User-Agent': crawlerUserAgent(crawler) } });
     const blockedByRobots = intentBlocked(robotsEntries, crawler);
 
@@ -97,10 +97,10 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
   }
 
   const okCount = [...outcomes.values()].filter((o) => o === 'ok').length;
-  if (okCount === CORE_AI_CRAWLERS.length) {
+  if (okCount === PROBEABLE_CORE_CRAWLERS.length) {
     findings.unshift({
       status: 'pass',
-      message: `All ${CORE_AI_CRAWLERS.length} core AI crawler user-agents receive equivalent responses`,
+      message: `All ${PROBEABLE_CORE_CRAWLERS.length} core AI crawler user-agents receive equivalent responses`,
     });
   }
 
@@ -109,7 +109,7 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
     if (o === 'reduced') return acc + 0.5;
     return acc;
   }, 0);
-  const score = Math.round((credit / CORE_AI_CRAWLERS.length) * 100);
+  const score = Math.round((credit / PROBEABLE_CORE_CRAWLERS.length) * 100);
 
   return buildResult(meta, score, findings, start);
 }

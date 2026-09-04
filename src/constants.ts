@@ -10,79 +10,466 @@ export const VERSION: string = pkg.version;
 export const USER_AGENT = `ax-audit/${pkg.version} (https://github.com/lucioduran/ax-audit)`;
 
 /**
- * Known AI / LLM crawlers grouped by primary purpose. The audit recommends explicit
- * `User-agent:` rules for every entry so site operators can see exactly which agents
- * have access. Buckets:
+ * What an AI client does with a page, and therefore what a site loses by
+ * blocking it. This distinction is the single most important thing an audit can
+ * tell an operator: blocking a training crawler is a policy choice, while
+ * blocking a search crawler removes the site from that assistant's answers.
  *
- * - `training`   — bots that scrape content for model training corpora
- * - `search`     — bots that fetch on behalf of a live answer engine / search UI
- * - `fetching`   — generic on-demand fetchers (browsing, summarization, automation)
+ * - `training`   — builds model training corpora.
+ * - `search`     — builds the index a live assistant cites from.
+ * - `user-fetch` — retrieves one URL because a human asked for it, right now.
+ * - `agent`      — an autonomous browser acting on a user's behalf.
  */
-export const AI_CRAWLERS: Record<string, string[]> = {
+export type CrawlerPurpose = 'training' | 'search' | 'user-fetch' | 'agent';
+
+export interface CrawlerInfo {
+  vendor: string;
+  purpose: CrawlerPurpose;
+  /**
+   * Whether the vendor documents that this client obeys robots.txt.
+   * `partial` covers clients documented as "may not apply" — chiefly
+   * user-triggered fetchers, which most vendors exempt.
+   */
+  honorsRobots: boolean | 'partial';
+  /** One sentence on what blocking this client costs. Surfaced directly in findings. */
+  impact: string;
+  /** Vendor documentation for the token. */
+  docUrl: string;
+  /** Published IP-range list, where the vendor offers one for reverse verification. */
+  ipListUrl?: string;
+  /** Vendor signs requests with Web Bot Auth (RFC 9421 HTTP Message Signatures). */
+  signsRequests?: boolean;
+  /**
+   * A robots.txt control token that never appears in a request. `Google-Extended`
+   * and `Applebot-Extended` govern how an already-crawled page may be used; no
+   * user agent carries these strings, so probing a site with them tests nothing.
+   */
+  tokenOnly?: boolean;
+  /** Extra context: renames, documentation changes, unusual behaviour. */
+  note?: string;
+}
+
+/**
+ * Per-token metadata for the crawlers worth explaining. Tokens in
+ * `AI_CRAWLERS` without an entry here are recognised for matching but carry no
+ * tailored advice — the long tail of data brokers and regional assistants.
+ *
+ * Every entry was verified against vendor documentation on 2026-09-04.
+ */
+export const CRAWLER_META: Record<string, CrawlerInfo> = {
+  GPTBot: {
+    vendor: 'OpenAI',
+    purpose: 'training',
+    honorsRobots: true,
+    impact: 'Blocking it keeps your content out of OpenAI model training. It does not affect ChatGPT search citations.',
+    docUrl: 'https://developers.openai.com/api/docs/bots',
+    ipListUrl: 'https://openai.com/gptbot.json',
+  },
+  'OAI-SearchBot': {
+    vendor: 'OpenAI',
+    purpose: 'search',
+    honorsRobots: true,
+    impact: 'Blocking it removes your site from ChatGPT search answers and citations.',
+    docUrl: 'https://developers.openai.com/api/docs/bots',
+    ipListUrl: 'https://openai.com/searchbot.json',
+    note: 'OpenAI removed the "also used for training" language from this bot in December 2025.',
+  },
+  'ChatGPT-User': {
+    vendor: 'OpenAI',
+    purpose: 'user-fetch',
+    honorsRobots: 'partial',
+    impact:
+      'Fetches a page because a ChatGPT user asked for that URL. Blocking it breaks link-following in conversations.',
+    docUrl: 'https://developers.openai.com/api/docs/bots',
+    ipListUrl: 'https://openai.com/chatgpt-user.json',
+    note: 'Since December 2025 OpenAI documents that robots.txt rules may not apply to this user-triggered fetcher.',
+  },
+  'OAI-AdsBot': {
+    vendor: 'OpenAI',
+    purpose: 'search',
+    honorsRobots: true,
+    impact: 'Validates landing pages for ChatGPT ads. No training use.',
+    docUrl: 'https://developers.openai.com/api/docs/bots',
+    ipListUrl: 'https://openai.com/adsbot.json',
+    note: 'Introduced April 2026.',
+  },
+  ClaudeBot: {
+    vendor: 'Anthropic',
+    purpose: 'training',
+    honorsRobots: true,
+    impact: 'Blocking it keeps your content out of Claude model training.',
+    docUrl: 'https://support.claude.com/en/articles/8896518',
+    ipListUrl: 'https://claude.com/crawling/bots.json',
+  },
+  'Claude-SearchBot': {
+    vendor: 'Anthropic',
+    purpose: 'search',
+    honorsRobots: true,
+    impact: 'Blocking it removes your site from the index Claude cites when it searches the web.',
+    docUrl: 'https://support.claude.com/en/articles/8896518',
+    ipListUrl: 'https://claude.com/crawling/bots.json',
+  },
+  'Claude-User': {
+    vendor: 'Anthropic',
+    purpose: 'user-fetch',
+    honorsRobots: true,
+    impact:
+      'Fetches a page because a Claude user asked for that URL. Blocking it breaks link-following in conversations.',
+    docUrl: 'https://support.claude.com/en/articles/8896518',
+    ipListUrl: 'https://claude.com/crawling/bots.json',
+    note: 'Unusual among user-triggered fetchers: Anthropic documents that it does obey robots.txt.',
+  },
+  'Google-Extended': {
+    vendor: 'Google',
+    purpose: 'training',
+    honorsRobots: true,
+    impact:
+      'Controls Gemini training and grounding in Gemini Apps and Vertex AI. It does NOT remove your site from AI Overviews or AI Mode, which follow Googlebot and the snippet directives.',
+    docUrl: 'https://developers.google.com/crawling/docs/crawlers-fetchers/google-common-crawlers',
+    tokenOnly: true,
+    note: 'A robots.txt token, not a crawler: no request ever carries this user agent.',
+  },
+  'Google-CloudVertexBot': {
+    vendor: 'Google',
+    purpose: 'training',
+    honorsRobots: true,
+    impact: 'Crawls sites at their owner\u2019s request to build Vertex AI Agents. Site-owner initiated.',
+    docUrl: 'https://developers.google.com/crawling/docs/crawlers-fetchers/google-common-crawlers',
+    ipListUrl: 'https://developers.google.com/static/crawling/ipranges/common-crawlers.json',
+  },
+  'Google-Agent': {
+    vendor: 'Google',
+    purpose: 'agent',
+    honorsRobots: false,
+    impact:
+      'Google\u2019s user-triggered browsing agent. It generally ignores robots.txt, so rules for it are advisory.',
+    docUrl: 'https://developers.google.com/crawling/docs/crawlers-fetchers/google-agent',
+    ipListUrl: 'https://developers.google.com/static/search/apis/ipranges/user-triggered-agents.json',
+    signsRequests: true,
+    note: 'Introduced 2026-03-20, superseding Project Mariner. Web Bot Auth identity https://agent.bot.goog (experimental; not every request is signed).',
+  },
+  'Google-GeminiNotebook': {
+    vendor: 'Google',
+    purpose: 'user-fetch',
+    honorsRobots: false,
+    impact: 'Fetches sources a user added to Gemini Notebook. Ignores robots.txt.',
+    docUrl: 'https://developers.google.com/crawling/docs/crawlers-fetchers/google-user-triggered-fetchers',
+    note: 'Renamed from Google-NotebookLM on 2026-07-17; the old token was supported until August 2026.',
+  },
+  bingbot: {
+    vendor: 'Microsoft',
+    purpose: 'search',
+    honorsRobots: true,
+    impact: 'Blocking it removes your site from Bing and from the index Copilot grounds its answers in.',
+    docUrl: 'https://www.bing.com/webmasters/help/which-crawlers-does-bing-use-8c184ec0',
+    ipListUrl: 'https://www.bing.com/toolbox/bingbot.json',
+    note: 'Multi-purpose: page-level noarchive / nocache directives control the Copilot generative use separately.',
+  },
+  'Meta-ExternalAgent': {
+    vendor: 'Meta',
+    purpose: 'training',
+    honorsRobots: true,
+    impact: 'Blocking it keeps your content out of Meta AI training and indexing.',
+    docUrl: 'https://developers.facebook.com/docs/sharing/webmasters/web-crawlers/',
+    note: 'Second-largest AI crawler by request share in mid-2026.',
+  },
+  'meta-webindexer': {
+    vendor: 'Meta',
+    purpose: 'search',
+    honorsRobots: true,
+    impact: 'Blocking it removes your site from Meta AI search results and citations.',
+    docUrl: 'https://developers.facebook.com/docs/sharing/webmasters/web-crawlers/',
+    note: 'Newer than the widely copied robots.txt templates, so most sites have no rule for it.',
+  },
+  'meta-externalfetcher': {
+    vendor: 'Meta',
+    purpose: 'user-fetch',
+    honorsRobots: 'partial',
+    impact: 'Fetches a page for a user request or agentic task. Meta documents that it may bypass robots.txt.',
+    docUrl: 'https://developers.facebook.com/docs/sharing/webmasters/web-crawlers/',
+  },
+  Applebot: {
+    vendor: 'Apple',
+    purpose: 'search',
+    honorsRobots: true,
+    impact: 'Powers Siri and Spotlight results, and since June 2026 also feeds Apple Intelligence answers.',
+    docUrl: 'https://support.apple.com/en-us/119829',
+    ipListUrl: 'https://search.developer.apple.com/applebot.json',
+    note: 'Falls back to Googlebot rules when no Applebot group exists.',
+  },
+  'Applebot-Extended': {
+    vendor: 'Apple',
+    purpose: 'training',
+    honorsRobots: true,
+    impact: 'Opts your content out of Apple foundation-model training without affecting Siri or Spotlight.',
+    docUrl: 'https://support.apple.com/en-us/119829',
+    tokenOnly: true,
+    note: 'A robots.txt token, not a crawler.',
+  },
+  Amazonbot: {
+    vendor: 'Amazon',
+    purpose: 'training',
+    honorsRobots: true,
+    impact: 'General crawler whose content may be used to train Amazon AI models.',
+    docUrl: 'https://developer.amazon.com/amazonbot',
+    ipListUrl: 'https://developer.amazon.com/amazonbot/ip-addresses/',
+    note: 'Managed through robots.txt only since 2026-06-15.',
+  },
+  'Amzn-SearchBot': {
+    vendor: 'Amazon',
+    purpose: 'search',
+    honorsRobots: true,
+    impact: 'Blocking it removes your site from Alexa and Rufus answers. No training use.',
+    docUrl: 'https://developer.amazon.com/amazonbot',
+  },
+  'Amzn-User': {
+    vendor: 'Amazon',
+    purpose: 'user-fetch',
+    honorsRobots: 'partial',
+    impact: 'Fetches a page for a live Amazon assistant request. No training use.',
+    docUrl: 'https://developer.amazon.com/amazonbot',
+  },
+  PerplexityBot: {
+    vendor: 'Perplexity',
+    purpose: 'search',
+    honorsRobots: true,
+    impact: 'Blocking it removes your site from Perplexity answers and citations. Not used for model training.',
+    docUrl: 'https://docs.perplexity.ai/docs/resources/perplexity-crawlers',
+    ipListUrl: 'https://www.perplexity.com/perplexitybot.json',
+  },
+  'Perplexity-User': {
+    vendor: 'Perplexity',
+    purpose: 'user-fetch',
+    honorsRobots: false,
+    impact: 'Fetches a page a Perplexity user opened. Perplexity documents that it generally ignores robots.txt.',
+    docUrl: 'https://docs.perplexity.ai/docs/resources/perplexity-crawlers',
+    ipListUrl: 'https://www.perplexity.com/perplexity-user.json',
+  },
+  CCBot: {
+    vendor: 'Common Crawl',
+    purpose: 'training',
+    honorsRobots: true,
+    impact:
+      'Builds the open Common Crawl corpus that many models train on. Blocking it is the single broadest training opt-out.',
+    docUrl: 'https://commoncrawl.org/ccbot',
+    ipListUrl: 'https://index.commoncrawl.org/ccbot.json',
+  },
+  Bytespider: {
+    vendor: 'ByteDance',
+    purpose: 'training',
+    honorsRobots: 'partial',
+    impact: 'Collects training data for ByteDance models. Compliance with robots.txt is disputed.',
+    docUrl: 'https://zhanzhang.toutiao.com/',
+  },
+  'MistralAI-User': {
+    vendor: 'Mistral',
+    purpose: 'user-fetch',
+    honorsRobots: true,
+    impact: 'Fetches a page for a Le Chat user request.',
+    docUrl: 'https://docs.mistral.ai/robots/',
+    ipListUrl: 'https://mistral.ai/mistralai-user-ips.json',
+  },
+  'MistralAI-Index': {
+    vendor: 'Mistral',
+    purpose: 'search',
+    honorsRobots: true,
+    impact: 'Blocking it removes your site from Le Chat search results. No training use.',
+    docUrl: 'https://docs.mistral.ai/robots/',
+    ipListUrl: 'https://mistral.ai/mistralai-index-ips.json',
+  },
+  'MistralAI-Training': {
+    vendor: 'Mistral',
+    purpose: 'training',
+    honorsRobots: true,
+    impact: 'Collects training data for Mistral models.',
+    docUrl: 'https://docs.mistral.ai/robots/',
+  },
+  DuckAssistBot: {
+    vendor: 'DuckDuckGo',
+    purpose: 'search',
+    honorsRobots: true,
+    impact: 'Fetches pages in real time for DuckDuckGo AI answers. No training use.',
+    docUrl: 'https://duckduckgo.com/duckduckgo-help-pages/results/duckassistbot/',
+    ipListUrl: 'https://duckduckgo.com/duckassistbot.json',
+  },
+  ExaSearchBot: {
+    vendor: 'Exa',
+    purpose: 'search',
+    honorsRobots: true,
+    impact: 'Builds the Exa search index used by AI agents and retrieval pipelines.',
+    docUrl: 'https://crawler.exa.ai/',
+    signsRequests: true,
+    note: 'Signs every request with Web Bot Auth, so an IP-verifying WAF can admit it precisely.',
+  },
+  Kagibot: {
+    vendor: 'Kagi',
+    purpose: 'search',
+    honorsRobots: true,
+    impact: 'Blocking it removes your site from Kagi search and its Assistant answers.',
+    docUrl: 'https://kagi.com/bot',
+  },
+  YouBot: {
+    vendor: 'You.com',
+    purpose: 'search',
+    honorsRobots: true,
+    impact: 'Indexes pages for You.com search and its LLM answers.',
+    docUrl: 'https://about.you.com/youbot/',
+    signsRequests: true,
+  },
+  AI2Bot: {
+    vendor: 'Allen Institute for AI',
+    purpose: 'training',
+    honorsRobots: true,
+    impact: 'Collects data for open research corpora (OLMo, Dolma).',
+    docUrl: 'https://allenai.org/crawler',
+  },
+  FirecrawlAgent: {
+    vendor: 'Firecrawl',
+    purpose: 'agent',
+    honorsRobots: true,
+    impact: 'Scraping-as-a-service used by agent builders to read your pages on demand.',
+    docUrl: 'https://docs.firecrawl.dev/',
+  },
+};
+
+/**
+ * Known AI clients grouped by what they do with a page. Matching is
+ * case-insensitive, per RFC 9309 §2.2.1, so the casing here is cosmetic and
+ * follows each vendor's own documentation.
+ *
+ * Verified against vendor documentation on 2026-09-04. Tokens that turned out
+ * never to have existed (`Gemini`, `GeminiBot`, `DeepSeek-AI`) or to belong to
+ * discontinued products (`NeevaBot`, `GoogleAgent-Mariner`) moved to
+ * `LEGACY_AI_CRAWLERS`.
+ */
+export const AI_CRAWLERS: Record<CrawlerPurpose, string[]> = {
   training: [
     'GPTBot',
     'ClaudeBot',
-    'Claude-Web',
-    'Anthropic-AI',
-    'Google-Extended',
-    'CCBot',
-    'Bytespider',
     'Meta-ExternalAgent',
-    'Meta-ExternalFetcher',
-    'Cohere-AI',
-    'cohere-training-data-crawler',
+    'Google-Extended',
     'Applebot-Extended',
     'Amazonbot',
+    'CCBot',
+    'Bytespider',
+    'TikTokSpider',
+    'MistralAI-Training',
     'AI2Bot',
-    'AI2Bot-Dolma',
-    'DeepSeek-AI',
+    'Ai2Bot-Dolma',
+    'DeepSeekBot',
     'PanguBot',
-    'Diffbot',
-    'MistralAI-User',
-    'Kangaroo Bot',
+    'Google-CloudVertexBot',
+    'FacebookBot',
     'Timpibot',
+    'Webzio-Extended',
     'omgili',
     'omgilibot',
     'ImagesiftBot',
-    'Webzio-Extended',
+    'Kangaroo Bot',
+    'Diffbot',
+    'YandexAdditional',
+    'YandexAdditionalBot',
   ],
   search: [
     'OAI-SearchBot',
-    'ChatGPT-User',
     'Claude-SearchBot',
-    'Claude-User',
     'PerplexityBot',
-    'Perplexity-User',
+    'meta-webindexer',
+    'Amzn-SearchBot',
+    'MistralAI-Index',
+    'Applebot',
+    'bingbot',
     'DuckAssistBot',
     'YouBot',
-    'Petalbot',
-    'Google-CloudVertexBot',
-    'Gemini',
-    'GeminiBot',
-    'KagiBot',
-    'NeevaBot',
+    'Kagibot',
+    'PetalBot',
+    'ExaSearchBot',
     'PhindBot',
+    'Yeti',
+    'OAI-AdsBot',
   ],
-  fetching: [
-    'FirecrawlAgent',
-    'Facebookbot',
-    'Bingbot',
-    'Goose',
-    'AwarioBot',
-    'AwarioRssBot',
-    'AwarioSmartBot',
-    'Google-Agent', // Google's official signed AI-agent UA (identity https://agent.bot.goog), oficializado 2026
+  'user-fetch': [
+    'ChatGPT-User',
+    'Claude-User',
+    'Perplexity-User',
+    'MistralAI-User',
+    'meta-externalfetcher',
+    'Amzn-User',
+    'Google-GeminiNotebook',
+    'kagi-fetcher',
+    'Kimi-User',
+    'TongyiBot',
   ],
+  agent: ['Google-Agent', 'NovaAct', 'Manus-User', 'Devin', 'FirecrawlAgent', 'TavilyBot'],
 };
 
-export const ALL_AI_CRAWLERS: string[] = [...AI_CRAWLERS.training, ...AI_CRAWLERS.search, ...AI_CRAWLERS.fetching];
+/**
+ * Tokens recognised for matching but never recommended: renamed, retired, or
+ * never real. A site that lists these is not wrong, but the rules are inert, so
+ * the audit says so rather than counting them as coverage.
+ */
+export const LEGACY_AI_CRAWLERS: Record<string, string> = {
+  'Claude-Web': 'Never documented by Anthropic and absent from its current crawler page. Use ClaudeBot.',
+  'Anthropic-AI': 'Never documented by Anthropic. Use ClaudeBot.',
+  'Google-NotebookLM': 'Renamed to Google-GeminiNotebook on 2026-07-17.',
+  'GoogleAgent-Mariner': 'Project Mariner was discontinued on 2026-05-04; superseded by Google-Agent.',
+  'Cohere-AI': 'Cohere states it operates no web crawlers.',
+  'cohere-training-data-crawler': 'Cohere states it operates no web crawlers.',
+  ExaBot: 'Superseded by ExaSearchBot.',
+  NeevaBot: 'Neeva was dissolved in 2023.',
+  Gemini: 'Not a real user-agent token. Gemini training and grounding are controlled by Google-Extended.',
+  GeminiBot: 'Not a real user-agent token. Gemini training and grounding are controlled by Google-Extended.',
+  'DeepSeek-AI': 'Not a documented token. The community-observed crawler identifies as DeepSeekBot.',
+  Goose: 'Block Goose is an agent framework that signs requests with Web Bot Auth; it has no robots.txt token.',
+  AwarioBot: 'Awario is a social-listening tool, not an AI crawler.',
+  AwarioRssBot: 'Awario is a social-listening tool, not an AI crawler.',
+  AwarioSmartBot: 'Awario is a social-listening tool, not an AI crawler.',
+  Operator: 'OpenAI Operator was discontinued on 2025-08-31 and never had a documented robots.txt token.',
+};
+
+export const ALL_AI_CRAWLERS: string[] = [
+  ...AI_CRAWLERS.training,
+  ...AI_CRAWLERS.search,
+  ...AI_CRAWLERS['user-fetch'],
+  ...AI_CRAWLERS.agent,
+];
 
 /**
- * The "must-configure" subset — these are the agents a typical operator should grant
- * (or knowingly deny) explicit access to. ax-audit grades the robots.txt section heavily
- * on coverage of this short list, while still rewarding broader explicit rules.
+ * The crawlers that matter most as of September 2026, by request share
+ * (Cloudflare Radar) and by what a site loses when each is blocked. Used for
+ * reporting, access probes, and remediation advice.
+ *
+ * Composition: the six highest-volume clients (Googlebot's AI use is governed
+ * by Google-Extended, Applebot's by Applebot-Extended, hence the opt-out tokens
+ * standing in for them), the broadest training corpus (CCBot), the three search
+ * bots whose absence costs citations, and the one user-triggered fetcher with
+ * material volume.
  */
 export const CORE_AI_CRAWLERS: string[] = [
+  'GPTBot',
+  'ClaudeBot',
+  'Meta-ExternalAgent',
+  'Google-Extended',
+  'Applebot-Extended',
+  'Amazonbot',
+  'Bytespider',
+  'CCBot',
+  'OAI-SearchBot',
+  'Claude-SearchBot',
+  'PerplexityBot',
+  'ChatGPT-User',
+];
+
+/**
+ * The 3.x scoring set, frozen at the eight tokens 3.0 shipped with.
+ *
+ * `robots-txt` deducts points for missing core crawlers, so widening the set
+ * would lower every existing score — a breaking change under the 3.x policy
+ * (see docs/architecture.md). The four additions in `CORE_AI_CRAWLERS` are
+ * reported informationally until 4.0, when this constant is removed and
+ * scoring moves to the full list.
+ */
+export const SCORED_CORE_CRAWLERS: string[] = [
   'GPTBot',
   'ClaudeBot',
   'ChatGPT-User',
@@ -92,6 +479,102 @@ export const CORE_AI_CRAWLERS: string[] = [
   'OAI-SearchBot',
   'CCBot',
 ];
+
+/**
+ * Core crawlers that actually issue HTTP requests.
+ *
+ * `Google-Extended` and `Applebot-Extended` are robots.txt control tokens: they
+ * govern how an already-crawled page may be used, and no request ever carries
+ * them as a user agent. Probing a site with those strings tests nothing, so
+ * access checks use this list instead of the full core set.
+ */
+export const PROBEABLE_CORE_CRAWLERS: string[] = CORE_AI_CRAWLERS.filter(
+  (token) => CRAWLER_META[token]?.tokenOnly !== true,
+);
+
+/**
+ * The AI-client tokens ax-audit 3.6 recognised, frozen for scoring stability.
+ *
+ * `robots-txt` deducts points for explicitly blocked AI crawlers. The 3.7
+ * catalogue refresh added real tokens that 3.6 missed (`meta-webindexer`,
+ * `Amzn-SearchBot`, `MistralAI-Index`, ...), and scoring against the new list
+ * would lower the score of any site that already blocks them — a breaking
+ * change under the 3.x policy (docs/architecture.md).
+ *
+ * So deductions are computed against this frozen list while the wider catalogue
+ * drives reporting. Removed at 4.0, when weights are redistributed anyway.
+ */
+export const SCORED_KNOWN_CRAWLERS_V3: string[] = [
+  'GPTBot',
+  'ClaudeBot',
+  'Claude-Web',
+  'Anthropic-AI',
+  'Google-Extended',
+  'CCBot',
+  'Bytespider',
+  'Meta-ExternalAgent',
+  'Meta-ExternalFetcher',
+  'Cohere-AI',
+  'cohere-training-data-crawler',
+  'Applebot-Extended',
+  'Amazonbot',
+  'AI2Bot',
+  'AI2Bot-Dolma',
+  'DeepSeek-AI',
+  'PanguBot',
+  'Diffbot',
+  'MistralAI-User',
+  'Kangaroo Bot',
+  'Timpibot',
+  'omgili',
+  'omgilibot',
+  'ImagesiftBot',
+  'Webzio-Extended',
+  'OAI-SearchBot',
+  'ChatGPT-User',
+  'Claude-SearchBot',
+  'Claude-User',
+  'PerplexityBot',
+  'Perplexity-User',
+  'DuckAssistBot',
+  'YouBot',
+  'Petalbot',
+  'Google-CloudVertexBot',
+  'Gemini',
+  'GeminiBot',
+  'KagiBot',
+  'NeevaBot',
+  'PhindBot',
+  'FirecrawlAgent',
+  'Facebookbot',
+  'Bingbot',
+  'Goose',
+  'AwarioBot',
+  'AwarioRssBot',
+  'AwarioSmartBot',
+  'Google-Agent',
+];
+
+/** Look up a crawler's metadata case-insensitively. */
+export function crawlerInfo(token: string): CrawlerInfo | undefined {
+  const key = Object.keys(CRAWLER_META).find((k) => k.toLowerCase() === token.toLowerCase());
+  return key === undefined ? undefined : CRAWLER_META[key];
+}
+
+/** Purpose bucket a token belongs to, or `undefined` when it is not a known AI client. */
+export function crawlerPurpose(token: string): CrawlerPurpose | undefined {
+  const lower = token.toLowerCase();
+  for (const [purpose, tokens] of Object.entries(AI_CRAWLERS) as [CrawlerPurpose, string[]][]) {
+    if (tokens.some((t) => t.toLowerCase() === lower)) return purpose;
+  }
+  return undefined;
+}
+
+/** Explanation for a retired or fictional token, or `undefined` when the token is current. */
+export function legacyCrawlerNote(token: string): string | undefined {
+  const key = Object.keys(LEGACY_AI_CRAWLERS).find((k) => k.toLowerCase() === token.toLowerCase());
+  return key === undefined ? undefined : LEGACY_AI_CRAWLERS[key];
+}
 
 /**
  * Default weight per check (sum: 100). Individual `CheckMeta.weight` overrides this map.

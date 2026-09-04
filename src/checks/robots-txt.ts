@@ -1,4 +1,15 @@
-import { ALL_AI_CRAWLERS, CONTENT_SIGNALS, CONTENT_SIGNAL_USE_VALUES, CORE_AI_CRAWLERS } from '../constants.js';
+import {
+  ALL_AI_CRAWLERS,
+  CONTENT_SIGNALS,
+  CONTENT_SIGNAL_USE_VALUES,
+  CORE_AI_CRAWLERS,
+  SCORED_CORE_CRAWLERS,
+  SCORED_KNOWN_CRAWLERS_V3,
+  crawlerInfo,
+  crawlerPurpose,
+  legacyCrawlerNote,
+  type CrawlerPurpose,
+} from '../constants.js';
 import { guideUrl } from '../guide-urls.js';
 import type { CheckContext, CheckResult, CheckMeta, Finding } from '../types.js';
 import { buildResult } from './utils.js';
@@ -45,40 +56,43 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
   const configuredBots = toBotEntries(robots);
   const wildcardEntry = configuredBots.find((b) => b.name === '*');
 
-  const coreConfigured = CORE_AI_CRAWLERS.filter((bot) =>
-    configuredBots.some((b) => b.name.toLowerCase() === bot.toLowerCase()),
-  );
-  const coreMissing = CORE_AI_CRAWLERS.filter(
-    (bot) => !configuredBots.some((b) => b.name.toLowerCase() === bot.toLowerCase()),
-  );
+  const isConfigured = (bot: string): boolean => configuredBots.some((b) => b.name.toLowerCase() === bot.toLowerCase());
 
-  if (coreConfigured.length === CORE_AI_CRAWLERS.length) {
-    findings.push({ status: 'pass', message: `All ${CORE_AI_CRAWLERS.length} core AI crawlers explicitly configured` });
+  // Scoring runs against the frozen 3.x core set; the wider September-2026 set
+  // drives reporting only, so the catalogue refresh cannot lower a score.
+  const coreConfigured = SCORED_CORE_CRAWLERS.filter(isConfigured);
+  const coreMissing = SCORED_CORE_CRAWLERS.filter((bot) => !isConfigured(bot));
+
+  if (coreConfigured.length === SCORED_CORE_CRAWLERS.length) {
+    findings.push({
+      status: 'pass',
+      message: `All ${SCORED_CORE_CRAWLERS.length} core AI crawlers explicitly configured`,
+    });
   } else if (coreConfigured.length > 0) {
     findings.push({
       status: 'warn',
-      message: `${coreConfigured.length}/${CORE_AI_CRAWLERS.length} core AI crawlers configured`,
+      message: `${coreConfigured.length}/${SCORED_CORE_CRAWLERS.length} core AI crawlers configured`,
       detail: `Missing: ${coreMissing.join(', ')}`,
       hint: `Add explicit User-agent entries for the missing crawlers with Allow: / for each one.`,
       learnMoreUrl: guideUrl(meta.id, 'missing-crawlers'),
     });
-    score -= Math.round((coreMissing.length / CORE_AI_CRAWLERS.length) * 30);
+    score -= Math.round((coreMissing.length / SCORED_CORE_CRAWLERS.length) * 30);
   } else {
     findings.push({
       status: 'fail',
       message: 'No core AI crawlers explicitly configured',
-      detail: `Expected: ${CORE_AI_CRAWLERS.join(', ')}`,
+      detail: `Expected: ${SCORED_CORE_CRAWLERS.join(', ')}`,
       hint: 'Add User-agent entries for core AI crawlers in your robots.txt. For each crawler, add: User-agent: <name> followed by Allow: / on the next line.',
       learnMoreUrl: guideUrl(meta.id, 'no-core-crawlers'),
     });
     score -= 40;
   }
 
+  addCurrentCoreFindings(isConfigured, findings);
+
   // Check wildcard blocking unconfigured AI crawlers
   if (wildcardEntry?.disallowed) {
-    const blockedByWildcard = CORE_AI_CRAWLERS.filter(
-      (bot) => !configuredBots.some((b) => b.name.toLowerCase() === bot.toLowerCase()),
-    );
+    const blockedByWildcard = SCORED_CORE_CRAWLERS.filter((bot) => !isConfigured(bot));
     if (blockedByWildcard.length > 0) {
       findings.push({
         status: 'warn',
@@ -102,8 +116,22 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
       hint: 'These crawlers have "Disallow: /" rules. If you want AI agents to access your site, change to "Allow: /" for each blocked crawler.',
       learnMoreUrl: guideUrl(meta.id, 'explicitly-blocked'),
     });
-    score -= blockedBots.length * 3;
+    // Only tokens 3.6 already knew about deduct, so the 3.7 catalogue refresh
+    // cannot lower an existing score. See SCORED_KNOWN_CRAWLERS_V3.
+    const scoredBlocks = blockedBots.filter((b) =>
+      SCORED_KNOWN_CRAWLERS_V3.some((ai) => ai.toLowerCase() === b.name.toLowerCase()),
+    );
+    score -= scoredBlocks.length * 3;
   }
+
+  addBlockedPurposeFindings(
+    blockedBots.map((b) => b.name),
+    findings,
+  );
+  addLegacyTokenFindings(
+    configuredBots.map((b) => b.name),
+    findings,
+  );
 
   // Check partial restrictions (Disallow on specific paths, not full block)
   const restrictedBots = configuredBots.filter(
@@ -154,6 +182,106 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
   });
 
   return buildResult(meta, score, findings, start);
+}
+
+/* ── Crawler catalogue reporting (informational in 3.x) ────────────────── */
+
+/**
+ * Report coverage of the September-2026 core set. Scoring still uses the frozen
+ * 3.x set, so this finding is advisory: it names the crawlers that gained
+ * material traffic since the scoring set was fixed, chiefly Meta's.
+ */
+function addCurrentCoreFindings(isConfigured: (bot: string) => boolean, findings: Finding[]): void {
+  const missing = CORE_AI_CRAWLERS.filter((bot) => !isConfigured(bot) && !SCORED_CORE_CRAWLERS.includes(bot));
+  if (missing.length === 0) return;
+
+  findings.push({
+    status: 'warn',
+    message: `${missing.length} high-volume AI crawler(s) have no explicit rule`,
+    detail: missing.map((bot) => `${bot} — ${crawlerInfo(bot)?.impact ?? 'no explicit rule'}`).join('\n'),
+    hint:
+      'These clients rose to material traffic share after the 3.x scoring set was fixed, so they are reported but not scored. ' +
+      'Add a User-agent group for each one stating your intent explicitly. They gain weight in ax-audit 4.0.',
+    learnMoreUrl: guideUrl(meta.id, 'current-core-crawlers'),
+  });
+}
+
+/**
+ * Explain a block in terms of what it costs, grouped by purpose.
+ *
+ * Blocking a training crawler is a deliberate, defensible policy choice.
+ * Blocking a search crawler removes the site from that assistant's answers,
+ * which operators frequently do by accident when copying a "block AI" snippet.
+ * Reporting both as one undifferentiated warning hides the difference that
+ * matters.
+ */
+function addBlockedPurposeFindings(blockedNames: string[], findings: Finding[]): void {
+  if (blockedNames.length === 0) return;
+
+  const byPurpose = new Map<CrawlerPurpose, string[]>();
+  for (const name of blockedNames) {
+    const purpose = crawlerPurpose(name);
+    if (purpose === undefined) continue;
+    byPurpose.set(purpose, [...(byPurpose.get(purpose) ?? []), name]);
+  }
+
+  const search = byPurpose.get('search') ?? [];
+  if (search.length > 0) {
+    findings.push({
+      status: 'warn',
+      message: `${search.length} assistant search crawler(s) blocked — your site cannot be cited by those assistants`,
+      detail: search.map((n) => `${n} — ${crawlerInfo(n)?.impact ?? 'search index crawler'}`).join('\n'),
+      hint:
+        'Search crawlers build the index an assistant cites from; they are separate from the training crawlers. ' +
+        'If the intent was to opt out of training only, allow these and block the training tokens instead.',
+      learnMoreUrl: guideUrl(meta.id, 'blocked-search-crawlers'),
+    });
+  }
+
+  const training = byPurpose.get('training') ?? [];
+  if (training.length > 0) {
+    findings.push({
+      status: 'pass',
+      message: `${training.length} training crawler(s) blocked — recorded as a deliberate policy choice`,
+      detail: training.join(', '),
+    });
+  }
+
+  const userFetch = byPurpose.get('user-fetch') ?? [];
+  const ignoring = userFetch.filter((n) => crawlerInfo(n)?.honorsRobots !== true);
+  if (ignoring.length > 0) {
+    findings.push({
+      status: 'warn',
+      message: `${ignoring.length} user-triggered fetcher(s) blocked in robots.txt that may ignore it`,
+      detail: ignoring
+        .map((n) => `${n} — ${crawlerInfo(n)?.note ?? 'documented as possibly ignoring robots.txt'}`)
+        .join('\n'),
+      hint:
+        'These clients fetch a page because a person asked for that URL, and their vendors document that robots.txt may not apply. ' +
+        'Enforce at the edge if the block must hold.',
+      learnMoreUrl: guideUrl(meta.id, 'blocked-user-fetchers'),
+    });
+  }
+}
+
+/**
+ * Flag rules for tokens that no longer do anything: renamed products,
+ * discontinued crawlers, and strings that were never real user agents but
+ * circulate widely in copy-pasted "block AI" snippets.
+ */
+function addLegacyTokenFindings(configuredNames: string[], findings: Finding[]): void {
+  const legacy = configuredNames
+    .map((name) => ({ name, note: legacyCrawlerNote(name) }))
+    .filter((e): e is { name: string; note: string } => e.note !== undefined);
+  if (legacy.length === 0) return;
+
+  findings.push({
+    status: 'warn',
+    message: `${legacy.length} robots.txt rule(s) target a retired or non-existent crawler token`,
+    detail: legacy.map((e) => `${e.name} — ${e.note}`).join('\n'),
+    hint: 'These rules have no effect. Remove them so the file reflects your actual policy.',
+    learnMoreUrl: guideUrl(meta.id, 'legacy-tokens'),
+  });
 }
 
 /* ── Content Signals Policy (https://contentsignals.org) ───────────────── */

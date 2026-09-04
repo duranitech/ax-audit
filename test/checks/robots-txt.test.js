@@ -366,3 +366,85 @@ describe('robots-txt', () => {
     });
   });
 });
+
+describe('robots-txt: 2026 crawler catalogue', () => {
+  const CORE_8 = [
+    'User-agent: GPTBot', 'Allow: /', '',
+    'User-agent: ClaudeBot', 'Allow: /', '',
+    'User-agent: ChatGPT-User', 'Allow: /', '',
+    'User-agent: Claude-SearchBot', 'Allow: /', '',
+    'User-agent: Google-Extended', 'Allow: /', '',
+    'User-agent: PerplexityBot', 'Allow: /', '',
+    'User-agent: OAI-SearchBot', 'Allow: /', '',
+    'User-agent: CCBot', 'Allow: /', '',
+    'Sitemap: https://example.com/sitemap.xml',
+  ];
+
+  async function audit(bodyLines) {
+    const ctx = mockContext({ '/robots.txt': mockResponse({ body: bodyLines.join('\n') }) });
+    return check(ctx);
+  }
+
+  it('should still score 100 for the eight-crawler configuration that scored 100 in 3.6', async () => {
+    const result = await audit(CORE_8);
+    assert.equal(result.score, 100, 'the catalogue refresh must not lower an existing perfect score');
+  });
+
+  it('should report high-volume crawlers missing from the config without deducting', async () => {
+    const result = await audit(CORE_8);
+    const finding = result.findings.find(f => f.message.includes('high-volume AI crawler'));
+    assert.ok(finding, 'Meta-ExternalAgent and friends should be surfaced');
+    assert.equal(finding.status, 'warn');
+    assert.ok(finding.detail.includes('Meta-ExternalAgent'));
+    assert.ok(finding.hint.includes('4.0'), 'the hint must say when these start counting');
+  });
+
+  it('should not deduct for blocking a crawler added in 3.7', async () => {
+    const withBlock = await audit([...CORE_8, '', 'User-agent: meta-webindexer', 'Disallow: /']);
+    const baseline = await audit(CORE_8);
+    assert.equal(withBlock.score, baseline.score, 'tokens added in 3.7 must not lower a 3.6 score');
+  });
+
+  it('should still deduct for blocking a crawler 3.6 already knew', async () => {
+    const withBlock = await audit([...CORE_8, '', 'User-agent: Bytespider', 'Disallow: /']);
+    const baseline = await audit(CORE_8);
+    assert.equal(withBlock.score, baseline.score - 3);
+  });
+
+  it('should call out blocked search crawlers as a visibility cost', async () => {
+    const result = await audit([...CORE_8, '', 'User-agent: PerplexityBot', 'Disallow: /']);
+    const finding = result.findings.find(f => f.message.includes('assistant search crawler'));
+    assert.ok(finding);
+    assert.equal(finding.status, 'warn');
+    assert.ok(finding.detail.includes('Perplexity answers'));
+  });
+
+  it('should record blocked training crawlers as a deliberate choice, not a defect', async () => {
+    const result = await audit([...CORE_8, '', 'User-agent: CCBot', 'Disallow: /']);
+    const finding = result.findings.find(f => f.message.includes('training crawler(s) blocked'));
+    assert.ok(finding);
+    assert.equal(finding.status, 'pass', 'opting out of training is a policy choice');
+  });
+
+  it('should warn when a blocked user-fetcher is documented as ignoring robots.txt', async () => {
+    const result = await audit([...CORE_8, '', 'User-agent: Perplexity-User', 'Disallow: /']);
+    const finding = result.findings.find(f => f.message.includes('user-triggered fetcher'));
+    assert.ok(finding);
+    assert.ok(finding.hint.includes('edge'), 'the fix is edge enforcement, not a robots.txt rule');
+  });
+
+  it('should flag rules targeting retired or fictional tokens', async () => {
+    const result = await audit([...CORE_8, '', 'User-agent: GeminiBot', 'Disallow: /', '', 'User-agent: Claude-Web', 'Disallow: /']);
+    const finding = result.findings.find(f => f.message.includes('retired or non-existent crawler token'));
+    assert.ok(finding);
+    assert.ok(finding.detail.includes('GeminiBot'));
+    assert.ok(finding.detail.includes('Claude-Web'));
+    assert.ok(finding.detail.includes('Google-Extended'), 'the fix for GeminiBot is Google-Extended');
+  });
+
+  it('should not deduct for rules targeting retired tokens beyond the frozen list', async () => {
+    const withLegacy = await audit([...CORE_8, '', 'User-agent: GoogleAgent-Mariner', 'Disallow: /']);
+    const baseline = await audit(CORE_8);
+    assert.equal(withLegacy.score, baseline.score);
+  });
+});

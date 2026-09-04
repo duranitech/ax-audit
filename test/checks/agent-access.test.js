@@ -40,7 +40,7 @@ describe('agent-access', () => {
 
   it('should warn and deduct when a crawler allowed by robots.txt is blocked', async () => {
     const result = await check(ctxWith({ byToken: { GPTBot: { status: 403, ok: false, body: '' } } }));
-    assert.equal(result.score, 88); // 7/8
+    assert.equal(result.score, 90); // 9/10 probeable core crawlers
     const finding = result.findings.find((f) => f.message.includes('GPTBot'));
     assert.equal(finding.status, 'warn');
     assert.ok(finding.message.includes('allowed in robots.txt'));
@@ -49,7 +49,7 @@ describe('agent-access', () => {
 
   it('should treat a network error for a crawler UA as blocked', async () => {
     const result = await check(ctxWith({ byToken: { ClaudeBot: { status: 0, ok: false, body: '' } } }));
-    assert.equal(result.score, 88);
+    assert.equal(result.score, 90);
     assert.ok(result.findings.some((f) => f.status === 'warn' && f.message.includes('ClaudeBot')));
   });
 
@@ -70,14 +70,14 @@ describe('agent-access', () => {
 
   it('should consider crawlers unrestricted when robots.txt is missing', async () => {
     const result = await check(ctxWith({ robots: null, byToken: { GPTBot: { status: 403, ok: false, body: '' } } }));
-    assert.equal(result.score, 88);
+    assert.equal(result.score, 90);
     const finding = result.findings.find((f) => f.message.includes('GPTBot'));
     assert.ok(finding.message.includes('not restricted'));
   });
 
   it('should warn with half credit when a crawler receives reduced content', async () => {
     const result = await check(ctxWith({ byToken: { PerplexityBot: { body: TINY_PAGE } } }));
-    assert.equal(result.score, 94); // 7.5/8
+    assert.equal(result.score, 95); // 9.5/10
     const finding = result.findings.find((f) => f.message.includes('PerplexityBot'));
     assert.equal(finding.status, 'warn');
     assert.ok(finding.message.includes('reduced content'));
@@ -118,7 +118,7 @@ describe('agent-access', () => {
         },
       }),
     );
-    assert.equal(result.score, 69); // (5 + 0.5) / 8
+    assert.equal(result.score, 75); // 7.5/10
   });
 
   it('should probe with a UA containing the crawler token', async () => {
@@ -142,5 +142,34 @@ describe('agent-access', () => {
   it('should clamp score within [0,100]', async () => {
     const result = await check(ctxWith());
     assert.ok(result.score >= 0 && result.score <= 100);
+  });
+});
+
+describe('agent-access: probe set', () => {
+  it('should never send a robots.txt-only control token as a user agent', async () => {
+    const seen = [];
+    const ctx = mockContext(
+      {
+        '/robots.txt': mockResponse({ body: ALLOW_ALL_ROBOTS }),
+        'https://example.com': (url, fetchOptions) => {
+          const ua = fetchOptions?.headers?.['User-Agent'];
+          if (ua) seen.push(ua);
+          return mockResponse({ body: FULL_PAGE, url });
+        },
+      },
+      { html: FULL_PAGE },
+    );
+    await check(ctx);
+
+    // Google-Extended and Applebot-Extended govern how a crawled page may be
+    // used. No request ever carries them, so probing with them proves nothing.
+    for (const tokenOnly of ['Google-Extended', 'Applebot-Extended']) {
+      assert.ok(
+        !seen.some((ua) => ua.includes(tokenOnly)),
+        `${tokenOnly} is a robots.txt control token, not a user agent`,
+      );
+    }
+    assert.ok(seen.some((ua) => ua.includes('GPTBot')));
+    assert.ok(seen.some((ua) => ua.includes('Meta-ExternalAgent')), 'the 3.7 catalogue added Meta to the core set');
   });
 });
