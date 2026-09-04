@@ -42,7 +42,7 @@ AI agents and LLMs are increasingly crawling, indexing, and interacting with web
 
 ## What it checks
 
-26 checks across five areas — 14 weighted, 12 informational. Full reference: **[docs/checks.md](docs/checks.md)**.
+27 checks across five areas — 14 weighted, 13 informational. Full reference: **[docs/checks.md](docs/checks.md)**.
 
 | Check | Weight | Check | Weight |
 |---|---|---|---|
@@ -57,7 +57,7 @@ AI agents and LLMs are increasingly crawling, indexing, and interacting with web
 
 \* Informational in 3.x: reported in full, no effect on the score. Weighted in v4.0.
 
-**Also checked, informational in 3.x** — AI Directives (the `nosnippet` / `noarchive` controls Google and Microsoft honor for AI answers) · Usage Policy (whether your Content Signals, AIPREF, RSL and TDMRep declarations agree with each other) · HTTP Hygiene (soft 404s, redirect depth, `Retry-After`, charset) · AI Catalog · Agent Skills · WebMCP · Commerce Discovery ([UCP](https://developers.google.com/merchant/ucp/guides/ucp-profile)) · Auth Discovery ([RFC 9728](https://www.rfc-editor.org/rfc/rfc9728.html)).
+**Also checked, informational in 3.x** — Agent Operability (whether a browser agent can name and press what is on the page) · AI Directives (the `nosnippet` / `noarchive` controls Google and Microsoft honor for AI answers) · Usage Policy (whether your Content Signals, AIPREF, RSL and TDMRep declarations agree with each other) · HTTP Hygiene (soft 404s, redirect depth, `Retry-After`, charset) · AI Catalog · Agent Skills · WebMCP · Commerce Discovery ([UCP](https://developers.google.com/merchant/ucp/guides/ucp-profile)) · Auth Discovery ([RFC 9728](https://www.rfc-editor.org/rfc/rfc9728.html)).
 
 Checks that do not apply to a site — a commerce profile on a blog, OAuth metadata where nothing needs authorizing — report **n/a** and are excluded from the score rather than counted as failures.
 

@@ -2,6 +2,25 @@
 
 All notable changes to ax-audit are documented here.
 
+## [3.9.0] - 2026-09-04
+
+Depth rather than breadth. One new check, and the existing readability checks extended to cover what agents actually do with a page once they reach it. Everything added is informational; scores are unchanged.
+
+### Added
+
+- **agent-operability**: whether a browser agent can work the page or only look at it. Every major browser agent reads the accessibility tree, so a `<div onclick>` styled as a button does not appear at all — the agent does not see a button it cannot press, it sees nothing. Checks accessible names on buttons and links, labels on form controls, elements dressed as controls, dead links, table headers, iframe titles, `<time datetime>`, heading skips, unsized media, `<html lang>`, and entry-page obstacles. Reports proportions with a 90% threshold, and states on every run that it reads markup rather than a rendered tree.
+
+### Changed
+
+- **llms.txt** gained the 2026 specification revision's additions — subpath scoping via `rel="describedby"`, per-page `.md` mirrors — plus link-health sampling. An llms.txt is written once and never revalidated while the site moves underneath it, so an index of dead links is its characteristic failure, and it wastes exactly the budget the file exists to save. Dead links are reported separately from redirecting ones. Every report now states who actually reads this file.
+- **content-negotiation** stopped probing with a header no client sends. A bare `Accept: text/markdown` would pass against an implementation that fails every real request; the probe now sends what Claude Code, Cursor and OpenCode send. Added: origin-reported token counts preferred over a byte ratio, frontmatter validation (stripping the HTML also strips the canonical link, leaving an agent unable to attribute what it quotes), and probes for user-agent negotiation and `.md` suffix URLs before concluding a site has no Markdown.
+- **structured-data** now reads provenance and freshness — `author`, `sameAs`, `publisher`, `dateModified` — and compares `headline` and `name` against the visible text, which is Google's one explicit requirement for structured data and AI features.
+- **crawl-efficiency** reports a page's cost in tokens rather than bytes, naming the markup share an agent pays to receive and then discards, plus response time in agent terms.
+
+### Tests
+
+828 total, up from 777.
+
 ## [3.8.0] - 2026-09-04
 
 Eight new checks, all weight 0, plus the reporting machinery they need. Where 3.7 corrected what ax-audit was looking for, 3.8 covers the signals it was not looking at.

@@ -1,6 +1,6 @@
 # Checks Reference
 
-ax-audit runs 26 checks. Fourteen are **weighted** (summing to 100% of the overall score); twelve are **informational** in 3.x — they run and report findings but carry weight 0 until v4.0, because score-affecting changes are treated as breaking (see [CHANGELOG 3.0.0](../CHANGELOG.md)).
+ax-audit runs 27 checks. Fourteen are **weighted** (summing to 100% of the overall score); thirteen are **informational** in 3.x — they run and report findings but carry weight 0 until v4.0, because score-affecting changes are treated as breaking (see [CHANGELOG 3.0.0](../CHANGELOG.md)).
 
 Checks are grouped into five areas, and reports are ordered by them: **content** (is there substance an agent can read?), **discovery** (can an agent find your machine-readable files?), **access** (can it actually retrieve them?), **policy** (what usage rights do you declare?), and **protocols** (what can an agent call?).
 
@@ -30,6 +30,13 @@ This page documents the **exact scoring** of every check: each deduction, bonus,
 | No Markdown links | −10 |
 | Content under 100 characters | −10 |
 | `/llms-full.txt` also available | **+10** (capped at 100) |
+| Broken links among a sample of 15 | informational, 0 in 3.x |
+| Redirecting or duplicated links | informational, 0 |
+| No `rel="describedby"` pointing at the file (llms.txt v2) | informational, 0 |
+| No per-page Markdown mirror (`/index.md`, `/index.html.md`) | informational, 0 |
+| File over 50 KB | informational, 0 |
+
+Every report states plainly that Google says Search ignores llms.txt and that most published files are never fetched by an AI search crawler, while Claude Code, Cursor and OpenCode do read it. It is a developer-tooling signal, not a search-visibility one.
 
 ### `robots-txt` — 11%
 
@@ -83,6 +90,11 @@ JSON-LD on the homepage. Key entity types: Person, Organization, WebSite, WebPag
 | Only one key entity type | −10 |
 | No `@graph` array | −5 |
 | No `BreadcrumbList` | −5 |
+| No `author`, no `sameAs`, or an author with no `publisher` | informational, 0 in 3.x |
+| No `dateModified` / `datePublished`, a future date, or content over 730 days old | informational, 0 |
+| `headline` or `name` not present in the visible text | informational, 0 |
+
+The visible-text comparison is Google's one explicit requirement for structured data and AI features. It reads static HTML, so text rendered by script reads as missing here too, and the finding says so.
 
 ### `http-headers` — 9%
 
@@ -298,6 +310,11 @@ Probes the homepage with `Accept: text/markdown` — the pattern served by Cloud
 | Body is a relabeled HTML document | −25 |
 | `Vary` does not include `Accept` | −15 |
 | Markdown not smaller than HTML | warn only, 0 |
+| Origin-reported token counts (`x-markdown-tokens` / `x-original-tokens`) | informational, 0 |
+| No frontmatter, or frontmatter with no title / canonical URL / date | informational, 0 |
+| User-agent negotiation or a `.md` suffix URL, when Accept negotiation fails | informational, 0 |
+
+The probe sends the Accept header a real agent sends (`text/markdown, text/html;q=0.9, */*;q=0.1`). A bare `text/markdown` would pass against an implementation that fails every real request.
 
 ### `rsl` — Really Simple Licensing
 
@@ -351,6 +368,8 @@ The probe is unsigned and comes from the auditor's own network, so an edge that 
 | Validator present but conditional request not answered with `304` | −15 |
 | Page > 2 MB decompressed | −10 |
 | Page > 500 KB decompressed | −5 |
+| Content tokens, wire tokens and markup share (estimated at 4 chars per token) | informational, 0 |
+| Response over 2s | informational, 0 |
 
 ---
 
@@ -451,6 +470,25 @@ Conditional: **n/a** on a page with no forms and no WebMCP code. Never asks for 
 | Tool name is not a usable identifier | −10 |
 | Deprecated `navigator.modelContext` namespace | −10 |
 | Forms present, none annotated | warn only, 0 |
+
+### `agent-operability` — can a browser agent work this page?
+
+Browser agents read the accessibility tree, not the pixels. A `<div onclick>` styled as a button has no role and no name, so it does not appear in the tree at all: the agent does not see a button it cannot press, it sees nothing.
+
+| Condition | Points |
+| --- | --- |
+| Homepage HTML unavailable | **hard fail → 0** |
+| Under 90% of buttons and links have an accessible name | −20 |
+| Under 90% of form controls are labelled | −20 |
+| Clickable elements that are not buttons or links (no `role` + `tabindex`) | −15 |
+| A CAPTCHA or `<meta http-equiv="refresh">` on the entry page | −15 |
+| Links with no `href` or a `javascript:` one | −10 |
+| Tables with no `<th>` | −10 |
+| Untitled iframes, `<time>` without `datetime`, heading-level skips, unsized media, no `<html lang>` | −5 each |
+
+Names are read from visible text, `aria-label`, `aria-labelledby`, `title`, image `alt`, and SVG `<title>`. Labels from `<label for>`, a wrapping label, or ARIA.
+
+Every run ends with a method note: this reads markup, not a rendered accessibility tree, so labels attached by script and roles computed at runtime are invisible to it. A low proportion is a prompt to check the real tree, not a count to act on blindly. Every finding is also a plain accessibility defect.
 
 ### `commerce-discovery` — Universal Commerce Protocol
 

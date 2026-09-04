@@ -17,7 +17,7 @@ cli.ts ──► orchestrator.ts ──► checks/* (Promise.allSettled, paralle
 1. **cli.ts** parses and validates flags, loads the baseline if requested, and dispatches to single or batch mode.
 2. **orchestrator.ts** (`audit`) creates one fetcher per run, fetches the homepage once, builds the `CheckContext` (`url`, `html`, `headers`, `fetch`), and runs all selected checks in parallel. A check that throws is converted into a score-0 result with the error as a finding — one bad check never kills the audit. `batchAudit` runs `audit` per URL through an order-preserving work queue with configurable `concurrency`.
 3. **fetcher.ts** wraps `fetch` with: per-run in-memory caching keyed on URL + normalized (lowercased, sorted) custom headers — mirroring HTTP `Vary` semantics so a `text/markdown` probe never collides with the HTML fetch; case-insensitive header merging over defaults; timeouts via `AbortController`; and retries with exponential backoff for transient failures (status 0, 408, 425, 429, 5xx). Errors never throw — they become `{ status: 0, ok: false, error }` results, also cached.
-4. **checks/** — one module per check (26). Each exports `default` (async check function) and `meta` (`{ id, name, description, weight, category?, aliases? }`).
+4. **checks/** — one module per check (27). Each exports `default` (async check function) and `meta` (`{ id, name, description, weight, category?, aliases? }`).
 5. **scorer.ts** computes the weighted average over the checks that ran *and apply*; a check reporting `applicable: false` is excluded from both numerator and denominator. When every applicable check has weight 0 it falls back to a plain average.
 6. **reporter/** renders to terminal (chalk), JSON, self-contained HTML, or Markdown, grouping checks by category and showing n/a where a check does not apply.
 7. **baseline.ts** persists minimal score snapshots and computes per-check diffs for regression gating.
@@ -91,6 +91,6 @@ Score deltas on the same site are treated as **breaking** (see CHANGELOG 3.0.0).
 
 ## Testing
 
-`npm test` builds (`tsc`) and runs `node --test`. The suite (755 tests) covers every check, the scorer, baseline logic, the Markdown reporter, plus integration tests that spin up real local HTTP servers for the fetcher (per-header caching, retries, HEAD and manual redirects) and the batch orchestrator (ordering, concurrency caps). No test dependencies beyond Node.
+`npm test` builds (`tsc`) and runs `node --test`. The suite (828 tests) covers every check, the scorer, baseline logic, the Markdown reporter, plus integration tests that spin up real local HTTP servers for the fetcher (per-header caching, retries, HEAD and manual redirects) and the batch orchestrator (ordering, concurrency caps). No test dependencies beyond Node.
 
 Two classes of test exist specifically to keep the 3.x promise that no score goes down: **score-stability tests** assert that a configuration which scored 100 in 3.6 still scores 100, and that findings added inside a weighted check leave the score untouched. When those fail, the change belongs in the next major, not the current minor.
