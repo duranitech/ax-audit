@@ -122,6 +122,7 @@ describe('baseline', () => {
   describe('diffBaseline', () => {
     it('should compute correct deltas for unchanged scores', () => {
       const baseline = {
+        schemaVersion: 2,
         url: 'https://example.com',
         timestamp: '2026-04-15T12:00:00.000Z',
         overallScore: 75,
@@ -141,6 +142,7 @@ describe('baseline', () => {
 
     it('should detect improvements', () => {
       const baseline = {
+        schemaVersion: 2,
         url: 'https://example.com',
         timestamp: '2026-04-15T12:00:00.000Z',
         overallScore: 50,
@@ -162,6 +164,7 @@ describe('baseline', () => {
 
     it('should detect regressions', () => {
       const baseline = {
+        schemaVersion: 2,
         url: 'https://example.com',
         timestamp: '2026-04-15T12:00:00.000Z',
         overallScore: 90,
@@ -181,6 +184,7 @@ describe('baseline', () => {
 
     it('should handle mixed improvements and regressions', () => {
       const baseline = {
+        schemaVersion: 2,
         url: 'https://example.com',
         timestamp: '2026-04-15T12:00:00.000Z',
         overallScore: 70,
@@ -198,6 +202,7 @@ describe('baseline', () => {
 
     it('should handle checks present in baseline but not in current run', () => {
       const baseline = {
+        schemaVersion: 2,
         url: 'https://example.com',
         timestamp: '2026-04-15T12:00:00.000Z',
         overallScore: 80,
@@ -216,6 +221,7 @@ describe('baseline', () => {
 
     it('should handle checks present in current run but not in baseline', () => {
       const baseline = {
+        schemaVersion: 2,
         url: 'https://example.com',
         timestamp: '2026-04-15T12:00:00.000Z',
         overallScore: 70,
@@ -234,6 +240,7 @@ describe('baseline', () => {
 
     it('should populate timestamps correctly', () => {
       const baseline = {
+        schemaVersion: 2,
         url: 'https://example.com',
         timestamp: '2026-04-15T12:00:00.000Z',
         overallScore: 75,
@@ -247,5 +254,111 @@ describe('baseline', () => {
       assert.equal(diff.currentTimestamp, '2026-04-16T12:00:00.000Z');
       assert.equal(diff.url, 'https://example.com');
     });
+  });
+});
+
+describe('baseline: scoring-model versioning', () => {
+  const report = (results, overallScore = 80) => ({
+    url: 'https://example.com',
+    timestamp: '2026-09-04T00:00:00.000Z',
+    overallScore,
+    grade: { min: 70, label: 'Good', color: 'yellow' },
+    duration: 10,
+    results,
+  });
+
+  const check = (id, score, applicable) => ({
+    id,
+    name: id,
+    description: '',
+    score,
+    findings: [],
+    duration: 1,
+    ...(applicable === false ? { applicable: false } : {}),
+  });
+
+  it('should stamp new baselines with the current schema version', () => {
+    const data = toBaselineData(report([check('llms-txt', 90)]));
+    assert.equal(data.schemaVersion, 2);
+  });
+
+  it('should record which checks were N/A', () => {
+    const data = toBaselineData(report([check('llms-txt', 90), check('api-discovery', 0, false)]));
+    assert.deepEqual(data.notApplicable, ['api-discovery']);
+  });
+
+  it('should omit the N/A list when everything applied', () => {
+    const data = toBaselineData(report([check('llms-txt', 90)]));
+    assert.equal(data.notApplicable, undefined);
+  });
+
+  it('should flag a comparison against a pre-4.0 baseline', () => {
+    const old = { url: 'https://example.com', timestamp: 't', overallScore: 90, checks: { 'llms-txt': 90 } };
+    const diff = diffBaseline(old, report([check('llms-txt', 50)]));
+    assert.equal(diff.scoringModelChanged, true);
+  });
+
+  it('should suspend regression gating across a scoring-model change', () => {
+    const old = { url: 'https://example.com', timestamp: 't', overallScore: 90, checks: { 'llms-txt': 90 } };
+    const diff = diffBaseline(old, report([check('llms-txt', 50)]));
+    assert.deepEqual(diff.regressions, [], 'a rescore is not something the site did');
+    assert.equal(diff.checks[0].delta, -40, 'the delta is still shown');
+  });
+
+  it('should gate normally when the models match', () => {
+    const current = {
+      schemaVersion: 2,
+      url: 'https://example.com',
+      timestamp: 't',
+      overallScore: 90,
+      checks: { 'llms-txt': 90 },
+    };
+    const diff = diffBaseline(current, report([check('llms-txt', 50)]));
+    assert.equal(diff.scoringModelChanged, undefined);
+    assert.equal(diff.regressions.length, 1);
+  });
+
+  it('should not read a change of applicability as a regression', () => {
+    const before = {
+      schemaVersion: 2,
+      url: 'https://example.com',
+      timestamp: 't',
+      overallScore: 90,
+      checks: { 'api-discovery': 80 },
+    };
+    // The site removed its API, so the check now reports N/A at score 0.
+    const diff = diffBaseline(before, report([check('api-discovery', 0, false)]));
+    assert.equal(diff.checks[0].applicabilityChanged, true);
+    assert.deepEqual(diff.regressions, [], 'losing a surface is a change of shape, not of quality');
+  });
+
+  it('should not read newly-applicable checks as improvements either', () => {
+    const before = {
+      schemaVersion: 2,
+      url: 'https://example.com',
+      timestamp: 't',
+      overallScore: 90,
+      checks: { 'api-discovery': 0 },
+      notApplicable: ['api-discovery'],
+    };
+    const diff = diffBaseline(before, report([check('api-discovery', 70)]));
+    assert.equal(diff.checks[0].applicabilityChanged, true);
+    assert.deepEqual(diff.improvements, []);
+  });
+
+  it('should still compare a check that stayed applicable', () => {
+    const before = {
+      schemaVersion: 2,
+      url: 'https://example.com',
+      timestamp: 't',
+      overallScore: 90,
+      checks: { 'llms-txt': 90, 'api-discovery': 0 },
+      notApplicable: ['api-discovery'],
+    };
+    const diff = diffBaseline(before, report([check('llms-txt', 70), check('api-discovery', 0, false)]));
+    const llms = diff.checks.find((c) => c.id === 'llms-txt');
+    assert.equal(llms.applicabilityChanged, undefined);
+    assert.equal(diff.regressions.length, 1);
+    assert.equal(diff.regressions[0].id, 'llms-txt');
   });
 });

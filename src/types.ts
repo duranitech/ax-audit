@@ -171,12 +171,24 @@ export type OutputFormat = 'terminal' | 'json' | 'html' | 'markdown';
 
 /* ── Baseline / Diff ──────────────────────────────────────── */
 
-/** Minimal snapshot of an audit run stored as the baseline file. */
+/**
+ * Minimal snapshot of an audit run stored as the baseline file.
+ *
+ * `schemaVersion` records which scoring model produced it. A baseline written
+ * before 4.0 was scored under different weights and without not-applicable
+ * exclusion, so comparing it directly to a 4.0 run reports regressions the
+ * site did not cause. Version 1 baselines (no field) are still read, and the
+ * diff says the comparison spans a scoring change.
+ */
 export interface BaselineData {
+  /** Absent on baselines written before 4.0, which are treated as version 1. */
+  schemaVersion?: number;
   url: string;
   timestamp: string;
   overallScore: number;
   checks: Record<string, number>; // checkId → score
+  /** Check ids that reported N/A, so a later N/A is not read as a change. */
+  notApplicable?: string[];
 }
 
 /** Per-check score delta. */
@@ -186,10 +198,21 @@ export interface CheckDiff {
   previous: number;
   current: number;
   delta: number; // positive = improvement, negative = regression
+  /**
+   * True when this check is N/A on one side of the comparison, so the delta is
+   * a change of applicability rather than of quality. Excluded from
+   * regressions.
+   */
+  applicabilityChanged?: boolean;
 }
 
 /** Full diff between the current audit and a stored baseline. */
 export interface BaselineDiff {
+  /**
+   * Set when the baseline predates the current scoring model. Deltas are still
+   * shown, but they measure the model change as much as the site.
+   */
+  scoringModelChanged?: boolean;
   url: string;
   baselineTimestamp: string;
   currentTimestamp: string;

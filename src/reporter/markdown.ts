@@ -66,6 +66,14 @@ export function renderMarkdown(report: AuditReport, diff?: BaselineDiff): string
   out.push(`<sub>${report.timestamp} · ${report.duration}ms</sub>`);
   out.push('');
 
+  if (diff?.scoringModelChanged) {
+    out.push(
+      '> **Baseline predates this scoring model.** Deltas below measure the model change as much as the site, and ' +
+        'regression gating is suspended. Re-save with `--save-baseline` to resume it.',
+    );
+    out.push('');
+  }
+
   // Summary table, grouped by category so a reader sees which area is weak.
   out.push('| Area | Check | Score |');
   out.push('| --- | --- | --- |');

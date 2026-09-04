@@ -62,6 +62,12 @@ export function reportTerminal(report: AuditReport, diff?: BaselineDiff): void {
   console.log(chalk.dim(`  ${report.timestamp}  (${report.duration}ms)`));
   if (diff) {
     console.log(chalk.dim(`  Baseline: ${diff.baselineTimestamp}`));
+    if (diff.scoringModelChanged) {
+      console.log(
+        chalk.yellow('  Baseline predates this scoring model — deltas measure the model change as much as the site.'),
+      );
+      console.log(chalk.dim('  Regression gating is suspended. Re-save with --save-baseline to resume it.'));
+    }
   }
   console.log();
 

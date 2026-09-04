@@ -65,6 +65,7 @@ describe('check ids: baseline compatibility across renames', () => {
 
   it('should match a baseline saved under the former id', () => {
     const baseline = {
+      schemaVersion: 2,
       url: 'https://example.com',
       timestamp: '2026-06-01T00:00:00.000Z',
       overallScore: 95,
@@ -79,6 +80,7 @@ describe('check ids: baseline compatibility across renames', () => {
 
   it('should still detect a real regression under the former id', () => {
     const baseline = {
+      schemaVersion: 2,
       url: 'https://example.com',
       timestamp: '2026-06-01T00:00:00.000Z',
       overallScore: 95,
@@ -91,6 +93,7 @@ describe('check ids: baseline compatibility across renames', () => {
 
   it('should prefer the current id when a baseline holds both', () => {
     const baseline = {
+      schemaVersion: 2,
       url: 'https://example.com',
       timestamp: '2026-06-01T00:00:00.000Z',
       overallScore: 95,
@@ -103,6 +106,7 @@ describe('check ids: baseline compatibility across renames', () => {
 
   it('should still report a genuinely removed check', () => {
     const baseline = {
+      schemaVersion: 2,
       url: 'https://example.com',
       timestamp: '2026-06-01T00:00:00.000Z',
       overallScore: 95,

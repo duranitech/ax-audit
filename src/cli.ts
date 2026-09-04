@@ -237,6 +237,12 @@ export function cli(argv: string[]): void {
           report(output, format, diff);
 
           // Determine exit code
+          if (diff?.scoringModelChanged && regressionThreshold !== undefined) {
+            console.error(
+              'Note: the baseline was written by an earlier scoring model, so regression gating is suspended for ' +
+                'this run. Re-save it with --save-baseline to resume gating.',
+            );
+          }
           if (diff && regressionThreshold !== undefined) {
             const worstRegression = diff.regressions.reduce((max, c) => Math.max(max, Math.abs(c.delta)), 0);
             if (worstRegression > regressionThreshold) {

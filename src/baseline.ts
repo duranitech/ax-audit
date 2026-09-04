@@ -8,16 +8,25 @@ import type { AuditReport, BaselineData, BaselineDiff, CheckDiff } from './types
  * Extract a minimal, stable snapshot from an AuditReport suitable for
  * persistence and future comparison.
  */
+/** Scoring model this build produces. Bumped whenever weights or the scoring rules change. */
+export const BASELINE_SCHEMA_VERSION = 2;
+
 export function toBaselineData(report: AuditReport): BaselineData {
   const checks: Record<string, number> = {};
+  const notApplicable: string[] = [];
+
   for (const r of report.results) {
     checks[r.id] = r.score;
+    if (r.applicable === false) notApplicable.push(r.id);
   }
+
   return {
+    schemaVersion: BASELINE_SCHEMA_VERSION,
     url: report.url,
     timestamp: report.timestamp,
     overallScore: report.overallScore,
     checks,
+    ...(notApplicable.length > 0 ? { notApplicable } : {}),
   };
 }
 
@@ -82,14 +91,22 @@ export function diffBaseline(baseline: BaselineData, report: AuditReport): Basel
     return undefined;
   };
 
+  const wasNotApplicable = new Set(baseline.notApplicable ?? []);
+
   const checks: CheckDiff[] = report.results.map((r) => {
     const previous = previousScoreFor(r.id) ?? 0;
+    const isNotApplicable = r.applicable === false;
+    // A check that is N/A on one side has no comparable score, so its delta
+    // reflects a change in what the site offers rather than in its quality.
+    const applicabilityChanged = isNotApplicable !== wasNotApplicable.has(r.id);
+
     return {
       id: r.id,
       name: r.name,
       previous,
       current: r.score,
       delta: r.score - previous,
+      ...(applicabilityChanged ? { applicabilityChanged: true } : {}),
     };
   });
 
@@ -107,8 +124,10 @@ export function diffBaseline(baseline: BaselineData, report: AuditReport): Basel
   }
 
   const overallDelta = report.overallScore - baseline.overallScore;
+  const scoringModelChanged = (baseline.schemaVersion ?? 1) !== BASELINE_SCHEMA_VERSION;
 
   return {
+    ...(scoringModelChanged ? { scoringModelChanged: true } : {}),
     url: report.url,
     baselineTimestamp: baseline.timestamp,
     currentTimestamp: report.timestamp,
@@ -116,8 +135,10 @@ export function diffBaseline(baseline: BaselineData, report: AuditReport): Basel
     overallCurrent: report.overallScore,
     overallDelta,
     checks,
-    regressions: checks.filter((c) => c.delta < 0),
-    improvements: checks.filter((c) => c.delta > 0),
+    // A regression must be something the site did. A check that changed
+    // applicability, or a baseline from a different scoring model, is neither.
+    regressions: scoringModelChanged ? [] : checks.filter((c) => c.delta < 0 && !c.applicabilityChanged),
+    improvements: checks.filter((c) => c.delta > 0 && !c.applicabilityChanged),
   };
 }
 
