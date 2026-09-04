@@ -1,3 +1,4 @@
+import { CHECK_CATEGORIES } from '../constants.js';
 import { guideUrl } from '../guide-urls.js';
 import type { CheckMeta, CheckResult, FetchResponse, Finding } from '../types.js';
 
@@ -19,7 +20,9 @@ export function buildResult(
     score: clampScore(score),
     findings,
     duration: Math.round(performance.now() - start),
-    ...(meta.category !== undefined ? { category: meta.category } : {}),
+    // Falls back to the central map so every result carries its category,
+    // including in JSON output where no reporter is there to resolve it.
+    ...((meta.category ?? CHECK_CATEGORIES[meta.id]) ? { category: meta.category ?? CHECK_CATEGORIES[meta.id] } : {}),
     ...(options.applicable === false ? { applicable: false } : {}),
   };
 }

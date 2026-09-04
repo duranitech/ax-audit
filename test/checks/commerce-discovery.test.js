@@ -32,9 +32,25 @@ function ctx({ profile = PROFILE, path = '/.well-known/ucp', routes = {}, html =
 describe('commerce-discovery: applicability', () => {
   it('should detect Product structured data, cart links and price tags', () => {
     assert.equal(hasCommerceSignals(SHOP_HTML).found, true);
-    assert.ok(hasCommerceSignals(SHOP_HTML).evidence.includes('Product or Offer structured data'));
+    assert.ok(hasCommerceSignals(SHOP_HTML).evidence.includes('Product or storefront structured data'));
     assert.equal(hasCommerceSignals('<a href="/checkout">Buy</a>').found, true);
     assert.equal(hasCommerceSignals('<meta property="product:price:amount" content="9.99">').found, true);
+  });
+
+  it('should not read a lone Offer as a storefront', () => {
+    // A SaaS landing page routinely prices its plans this way. That is a price
+    // statement, not a catalog an agent can transact against.
+    const saas =
+      '<html><body><script type="application/ld+json">{"@type":"SoftwareApplication","offers":{"@type":"Offer","price":"20"}}</script></body></html>';
+    assert.equal(hasCommerceSignals(saas).found, false);
+  });
+
+  it('should read an Offer alongside a cart as a storefront', () => {
+    const shop =
+      '<html><body><script type="application/ld+json">{"@type":"Offer","price":"20"}</script><a href="/cart">Cart</a></body></html>';
+    const signals = hasCommerceSignals(shop);
+    assert.equal(signals.found, true);
+    assert.ok(signals.evidence.includes('Offer structured data'));
   });
 
   it('should report N/A for a site that sells nothing', async () => {

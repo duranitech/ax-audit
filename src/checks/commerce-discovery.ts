@@ -40,25 +40,38 @@ const PROFILE_PATHS = ['/.well-known/ucp', '/.well-known/ucp.json'];
 /** Capability names the specification defines, for reporting unknown ones. */
 const KNOWN_CAPABILITY_PREFIX = 'dev.ucp.';
 
-/** Evidence that this site sells something. */
+/**
+ * Evidence that this site has a storefront an agent could transact against.
+ *
+ * The distinction that matters is between selling and pricing. A SaaS landing
+ * page routinely carries a lone `Offer` describing its plans; that is a price
+ * statement, not a catalog, and telling such a site to publish a commerce
+ * profile would be wrong. So a bare `Offer` counts only alongside a second
+ * signal, while an unambiguous storefront type stands on its own.
+ */
 export function hasCommerceSignals(html: string): { found: boolean; evidence: string[] } {
   const evidence: string[] = [];
+  let weakOffer = false;
 
   for (const block of html.matchAll(
     /<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi,
   )) {
-    if (/"@type"\s*:\s*"(Product|Offer|AggregateOffer|OnlineStore|OnlineMarketplace)"/i.test(block[1])) {
-      evidence.push('Product or Offer structured data');
+    if (/"@type"\s*:\s*"(Product|AggregateOffer|OnlineStore|OnlineMarketplace|ItemList)"/i.test(block[1])) {
+      evidence.push('Product or storefront structured data');
       break;
     }
+    if (/"@type"\s*:\s*"Offer"/i.test(block[1])) weakOffer = true;
   }
 
-  if (/<a\b[^>]+href\s*=\s*["'][^"']*\/(cart|checkout|basket|bag)\b/i.test(html)) {
-    evidence.push('links to a cart or checkout');
-  }
+  const hasCart = /<a\b[^>]+href\s*=\s*["'][^"']*\/(cart|checkout|basket|bag)\b/i.test(html);
+  if (hasCart) evidence.push('links to a cart or checkout');
+
   if (/<meta\b[^>]+property\s*=\s*["']product:price:amount["']/i.test(html)) {
     evidence.push('product price Open Graph tags');
   }
+
+  // A lone Offer is a plan price. Paired with a cart, it is a storefront.
+  if (weakOffer && evidence.length > 0) evidence.push('Offer structured data');
 
   return { found: evidence.length > 0, evidence };
 }
