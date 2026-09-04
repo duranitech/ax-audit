@@ -5,7 +5,9 @@ import { VERSION } from './constants.js';
 import { checks as allChecks } from './checks/index.js';
 import { allSelectableIds } from './check-ids.js';
 import { saveBaseline, loadBaseline, diffBaseline } from './baseline.js';
-import type { AuditReport, BaselineDiff, OutputFormat } from './types.js';
+import { calculateOverallScore } from './scorer.js';
+import { CHECK_CATEGORIES } from './constants.js';
+import type { AuditReport, BaselineDiff, CheckCategory, OutputFormat } from './types.js';
 
 interface CliOptions {
   json?: boolean;
@@ -19,6 +21,61 @@ interface CliOptions {
   saveBaseline?: string;
   baseline?: string;
   failOnRegression?: string;
+  profile?: string;
+  category?: string;
+  failOnCategory?: string;
+}
+
+/** Profiles that force conditional protocol checks applicable. */
+const VALID_PROFILES = ['auto', 'api', 'mcp', 'agent', 'docs', 'commerce', 'all'] as const;
+
+/** Report areas, usable with `--category` and `--fail-on-category`. */
+const VALID_CATEGORIES: CheckCategory[] = ['content', 'discovery', 'access', 'policy', 'protocols'];
+
+/**
+ * Parse `--fail-on-category area:score` pairs into thresholds.
+ *
+ * An overall score hides a category that is entirely broken: a site can score
+ * 80 while every access check fails, because the other four areas carry it.
+ * Per-area gates let a team say "content may drift, but access must not".
+ */
+export function parseCategoryThresholds(raw: string): { thresholds: Map<CheckCategory, number>; error?: string } {
+  const thresholds = new Map<CheckCategory, number>();
+
+  for (const pair of raw.split(',')) {
+    const trimmed = pair.trim();
+    if (trimmed === '') continue;
+    const [name, value] = trimmed.split(':');
+    const category = (name ?? '').trim().toLowerCase() as CheckCategory;
+
+    if (!VALID_CATEGORIES.includes(category)) {
+      return { thresholds, error: `Unknown category "${name}". Valid: ${VALID_CATEGORIES.join(', ')}` };
+    }
+    const score = Number((value ?? '').trim());
+    if (!Number.isInteger(score) || score < 0 || score > 100) {
+      return { thresholds, error: `Threshold for "${category}" must be an integer between 0 and 100` };
+    }
+    thresholds.set(category, score);
+  }
+
+  if (thresholds.size === 0) {
+    return { thresholds, error: 'Expected at least one area:score pair, for example access:70' };
+  }
+  return { thresholds };
+}
+
+/** Score of one report area, over the checks in it that apply. */
+export function categoryScore(report: AuditReport, category: CheckCategory): number | null {
+  const metas = new Map(allChecks.map((c) => [c.meta.id, c.meta]));
+  const inCategory = report.results.filter((r) => {
+    if (r.applicable === false) return false;
+    const meta = metas.get(r.id);
+    return (meta?.category ?? CHECK_CATEGORIES[r.id]) === category;
+  });
+  if (inCategory.length === 0) return null;
+
+  const metasFor = inCategory.map((r) => metas.get(r.id)).filter((m): m is NonNullable<typeof m> => m !== undefined);
+  return calculateOverallScore(inCategory, metasFor);
 }
 
 export function cli(argv: string[]): void {
@@ -43,6 +100,16 @@ export function cli(argv: string[]): void {
       '--fail-on-regression <points>',
       'Exit with code 1 if any check regresses by more than N points (requires --baseline)',
     )
+    .option(
+      '--profile <name>',
+      `Audit as though the site had a surface it does not yet expose: ${VALID_PROFILES.join(', ')}`,
+      'auto',
+    )
+    .option('--category <list>', `Only run checks in these areas: ${VALID_CATEGORIES.join(', ')}`)
+    .option(
+      '--fail-on-category <pairs>',
+      'Exit with code 1 when an area scores below its threshold, e.g. access:70,content:80',
+    )
     .action(async (urls: string[], options: CliOptions) => {
       for (const url of urls) {
         try {
@@ -65,7 +132,31 @@ export function cli(argv: string[]): void {
         process.exit(1);
       }
 
-      const checks = options.checks ? options.checks.split(',').map((s) => s.trim()) : undefined;
+      const profile = (options.profile ?? 'auto') as (typeof VALID_PROFILES)[number];
+      if (!VALID_PROFILES.includes(profile)) {
+        console.error(`Error: Unknown profile "${options.profile}". Valid: ${VALID_PROFILES.join(', ')}`);
+        process.exit(1);
+      }
+
+      let checks = options.checks ? options.checks.split(',').map((s) => s.trim()) : undefined;
+
+      if (options.category) {
+        const wanted = options.category.split(',').map((c) => c.trim().toLowerCase()) as CheckCategory[];
+        const unknown = wanted.filter((c) => !VALID_CATEGORIES.includes(c));
+        if (unknown.length > 0) {
+          console.error(`Error: Unknown categor(y|ies): ${unknown.join(', ')}. Valid: ${VALID_CATEGORIES.join(', ')}`);
+          process.exit(1);
+        }
+        const inCategory = allChecks
+          .filter((c) => wanted.includes(c.meta.category ?? CHECK_CATEGORIES[c.meta.id]))
+          .map((c) => c.meta.id);
+        // `--category` narrows an explicit `--checks` selection rather than replacing it.
+        checks = checks === undefined ? inCategory : checks.filter((id) => inCategory.includes(id));
+        if (checks.length === 0) {
+          console.error('Error: No checks match the requested category and check selection');
+          process.exit(1);
+        }
+      }
 
       if (checks) {
         // Former ids stay valid so CI invocations survive a rename.
@@ -90,11 +181,22 @@ export function cli(argv: string[]): void {
         process.exit(1);
       }
 
+      let categoryThresholds: Map<CheckCategory, number> | undefined;
+      if (options.failOnCategory) {
+        const parsed = parseCategoryThresholds(options.failOnCategory);
+        if (parsed.error) {
+          console.error(`Error: --fail-on-category: ${parsed.error}`);
+          process.exit(1);
+        }
+        categoryThresholds = parsed.thresholds;
+      }
+
       const baseOptions = {
         checks,
         timeout: parseInt(options.timeout, 10),
         retries,
         verbose: options.verbose,
+        profile,
       };
 
       // Load baseline if requested (fail fast before running the audit)
@@ -142,6 +244,10 @@ export function cli(argv: string[]): void {
             }
           }
 
+          if (categoryThresholds && failsCategoryGate(result, categoryThresholds)) {
+            process.exit(1);
+          }
+
           process.exit(result.overallScore >= 70 ? 0 : 1);
         } else {
           // Batch mode — baseline comparison is not supported for batch (would need per-URL baselines)
@@ -157,6 +263,9 @@ export function cli(argv: string[]): void {
             batch.reports = batch.reports.map((r) => applyOnlyFailures(r, true));
           }
           reportBatch(batch, format);
+          if (categoryThresholds && batch.reports.some((r) => failsCategoryGate(r, categoryThresholds))) {
+            process.exit(1);
+          }
           process.exit(batch.summary.failed === 0 ? 0 : 1);
         }
       } catch (err: unknown) {
@@ -167,6 +276,32 @@ export function cli(argv: string[]): void {
     });
 
   program.parse(argv);
+}
+
+/**
+ * Report each area against its threshold and say whether the gate failed.
+ *
+ * Printed to stderr rather than the report, so it survives `--output json`
+ * being piped somewhere and reads correctly in CI logs.
+ */
+function failsCategoryGate(result: AuditReport, thresholds: Map<CheckCategory, number>): boolean {
+  let failed = false;
+
+  for (const [category, threshold] of thresholds) {
+    const score = categoryScore(result, category);
+    if (score === null) {
+      console.error(`  ${category}: n/a (no applicable checks) — threshold ${threshold} not evaluated`);
+      continue;
+    }
+    if (score < threshold) {
+      console.error(`  ${category}: ${score} is below the threshold of ${threshold}`);
+      failed = true;
+    } else {
+      console.error(`  ${category}: ${score} meets the threshold of ${threshold}`);
+    }
+  }
+
+  return failed;
 }
 
 function applyOnlyFailures(result: AuditReport, onlyFailures?: boolean): AuditReport {
