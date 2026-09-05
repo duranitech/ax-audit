@@ -2,6 +2,10 @@
 
 All notable changes to ax-audit are documented here.
 
+## [4.2.1] - 2026-09-05
+
+**The tarball stops shipping retired checks.** `dist/` was never cleaned between builds, so the compiled remains of `agent-json`, `mcp` and `well-known-ai` — checks retired across 3.x and 4.0 — kept riding along in every publish, 4.2.0 included. They were inert (the orchestrator registers checks through the entry point alone), but they bloated the package and lied to anything that reads the shipped files as an inventory. `npm run build` now deletes `dist/` before compiling, so the tarball is the source, entirely and only.
+
 ## [4.2.0] - 2026-09-04
 
 **Three checks stop grading the wrong thing.** Every change can raise scores; none can lower one, so baselines written by 4.1 gain no false regressions.

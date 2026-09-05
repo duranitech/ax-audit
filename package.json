@@ -1,6 +1,6 @@
 {
   "name": "ax-audit",
-  "version": "4.2.0",
+  "version": "4.2.1",
   "description": "Audit websites for AI Agent Experience (AX) readiness. Lighthouse for AI Agents.",
   "type": "module",
   "license": "Apache-2.0",
@@ -57,7 +57,7 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && tsc",
     "start": "node bin/ax-audit.js",
     "pretest": "npm run build",
     "test": "node --test test/*.test.js test/**/*.test.js",
