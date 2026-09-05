@@ -167,6 +167,21 @@ describe('structured-data: provenance and freshness', () => {
     assert.ok(sameAs.detail.includes('wikidata'));
   });
 
+  it('should follow an @id reference to the author node', async () => {
+    // The @graph idiom: the author is a reference to the Organization
+    // declared beside it, not an inline copy. Yoast emits exactly this
+    // shape; "no author declared" was the wrong answer to it.
+    const graph = {
+      '@context': 'https://schema.org',
+      '@graph': [
+        { '@type': 'Organization', '@id': 'https://acme.test/#org', name: 'Acme', sameAs: ['https://www.wikidata.org/wiki/Q1'] },
+        { '@type': 'Article', headline: 'X', author: { '@id': 'https://acme.test/#org' }, publisher: { '@id': 'https://acme.test/#org' } },
+      ],
+    };
+    const result = await check(mockContext({}, { html: ld(graph) }));
+    assert.ok(result.findings.some((f) => f.message.includes('Authorship declared: Acme')));
+  });
+
   it('should explain what sameAs is for when it is absent', async () => {
     const { author, ...rest } = BASE;
     void author;

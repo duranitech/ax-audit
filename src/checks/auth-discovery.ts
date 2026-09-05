@@ -36,13 +36,13 @@ const OPENID_CONFIGURATION = '/.well-known/openid-configuration';
 
 /** Paths that indicate the site has something worth authorizing. */
 const SURFACE_PROBES = [
-  { path: '/openapi.json', label: 'an OpenAPI description' },
-  { path: '/.well-known/openapi.json', label: 'an OpenAPI description' },
-  { path: '/.well-known/api-catalog', label: 'an API catalog' },
-  { path: '/.well-known/mcp/server-card.json', label: 'an MCP server card' },
-  { path: '/mcp/server-card', label: 'an MCP server card' },
-  { path: '/.well-known/ucp', label: 'a commerce profile' },
-];
+  { path: '/openapi.json', label: 'an OpenAPI description', kind: 'openapi' },
+  { path: '/.well-known/openapi.json', label: 'an OpenAPI description', kind: 'openapi' },
+  { path: '/.well-known/api-catalog', label: 'an API catalog', kind: 'other' },
+  { path: '/.well-known/mcp/server-card.json', label: 'an MCP server card', kind: 'mcp-card' },
+  { path: '/mcp/server-card', label: 'an MCP server card', kind: 'mcp-card' },
+  { path: '/.well-known/ucp', label: 'a commerce profile', kind: 'other' },
+] as const;
 
 async function fetchJson(ctx: CheckContext, url: string): Promise<Record<string, unknown> | null> {
   const res = await ctx.fetch(url);
@@ -54,13 +54,93 @@ async function fetchJson(ctx: CheckContext, url: string): Promise<Record<string,
   }
 }
 
+/**
+ * Does an OpenAPI description say credentials exist anywhere in the API?
+ *
+ * A document that declares no security scheme has nothing an OAuth flow
+ * could attach to, and a security requirement cannot legally reference an
+ * undeclared scheme, so the absence of schemes is decisive on its own.
+ * Root-level `security: []` says the same thing more loudly. Either way,
+ * the API is stating "you do not authenticate", and demanding OAuth
+ * discovery metadata from it would penalize the honest answer.
+ */
+function declaresNoAuth(body: string): boolean {
+  try {
+    const doc = JSON.parse(body) as Record<string, unknown>;
+    const components = doc.components as Record<string, unknown> | undefined;
+    const schemes =
+      (components?.securitySchemes as Record<string, unknown> | undefined) ??
+      (doc.securityDefinitions as Record<string, unknown> | undefined);
+    return schemes === undefined || Object.keys(schemes).length === 0;
+  } catch {
+    // Not JSON we can read; assume it could describe an authenticated API.
+    return false;
+  }
+}
+
+/**
+ * Does the MCP server this card advertises actually demand credentials?
+ *
+ * The card format has no field that says "no authentication", so the
+ * remote endpoint is asked directly: a server that requires OAuth answers
+ * an unauthenticated request with 401 before anything else — that 401 is
+ * where the RFC 9728 chain is supposed to begin. Any other answer means
+ * the transport serves anonymous callers. A card with no remotes names a
+ * server an agent runs locally, which has no HTTP resource to protect.
+ */
+async function mcpRemoteNeedsAuth(ctx: CheckContext, body: string): Promise<boolean> {
+  try {
+    const card = JSON.parse(body) as Record<string, unknown>;
+    const remotes = Array.isArray(card.remotes) ? (card.remotes as unknown[]) : [];
+    const urls = remotes
+      .map((r) => (r !== null && typeof r === 'object' ? (r as Record<string, unknown>).url : undefined))
+      .filter((u): u is string => typeof u === 'string')
+      .slice(0, 3);
+    if (urls.length === 0) return false;
+    for (const url of urls) {
+      const res = await ctx.fetch(url);
+      if (res.status === 401) return true;
+    }
+    return false;
+  } catch {
+    // Not a card we can read; keep treating it as a surface.
+    return true;
+  }
+}
+
+interface SurfaceScan {
+  /** The first surface that could need credentials, if any. */
+  surface: string | null;
+  /** The path of an API description that declares itself credential-free. */
+  publicApi: string | null;
+  /** The path of an MCP server card whose remote serves anonymous callers. */
+  anonymousMcp: string | null;
+}
+
 /** Does this site expose anything an agent would need credentials for? */
-async function findSurface(ctx: CheckContext): Promise<string | null> {
+async function scanSurfaces(ctx: CheckContext): Promise<SurfaceScan> {
+  let publicApi: string | null = null;
+  let anonymousMcp: string | null = null;
   for (const probe of SURFACE_PROBES) {
     const res = await ctx.fetch(`${ctx.url}${probe.path}`);
-    if (res.ok && res.body.trim().length > 0 && !isHtmlDocument(res.body)) return probe.label;
+    if (!res.ok || res.body.trim().length === 0 || isHtmlDocument(res.body)) continue;
+    // A surface gets to answer the question itself where its format
+    // allows it: an OpenAPI description that declares no authentication,
+    // and an MCP card whose remote never answers 401, are not surfaces
+    // auth discovery applies to. Catalogs and commerce profiles stay
+    // surfaces — neither carries a machine-readable "no credentials"
+    // claim, and there is nothing to probe.
+    if (probe.kind === 'openapi' && declaresNoAuth(res.body)) {
+      publicApi = probe.path;
+      continue;
+    }
+    if (probe.kind === 'mcp-card' && !(await mcpRemoteNeedsAuth(ctx, res.body))) {
+      anonymousMcp = probe.path;
+      continue;
+    }
+    return { surface: probe.label, publicApi, anonymousMcp };
   }
-  return null;
+  return { surface: null, publicApi, anonymousMcp };
 }
 
 /** Read the `resource_metadata` parameter out of a `WWW-Authenticate` challenge. */
@@ -91,8 +171,25 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
     (await fetchJson(ctx, `${ctx.url}${PROTECTED_RESOURCE}`));
 
   if (resource === null) {
-    const surface = await findSurface(ctx);
+    const { surface, publicApi, anonymousMcp } = await scanSurfaces(ctx);
     if (surface === null) {
+      if (publicApi !== null) {
+        findings.push({
+          status: 'pass',
+          message: 'The API description declares no authentication — auth discovery does not apply',
+          detail: `${publicApi} declares no security scheme, which in OpenAPI is the statement that every operation is anonymous. There is nothing here for an OAuth flow to attach to.`,
+        });
+      }
+      if (anonymousMcp !== null) {
+        findings.push({
+          status: 'pass',
+          message: 'The MCP server serves anonymous callers — auth discovery does not apply',
+          detail: `The remote endpoint named by ${anonymousMcp} answers an unauthenticated request without a 401, so there is no challenge for the RFC 9728 chain to begin from.`,
+        });
+      }
+      if (publicApi !== null || anonymousMcp !== null) {
+        return notApplicable(meta, findings, start);
+      }
       findings.push({
         status: 'pass',
         message: 'Nothing on this site requires authorization — auth discovery does not apply',

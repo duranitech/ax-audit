@@ -1,6 +1,6 @@
 import { guideUrl } from '../guide-urls.js';
 import type { CheckContext, CheckResult, CheckMeta, Finding } from '../types.js';
-import { countExecutableScripts, extractVisibleText, findOpeningTag, getMetaContent } from './html-utils.js';
+import { countExecutableScripts, extractVisibleText, findOpeningTag, getMetaContent, structuralMarkupLength } from './html-utils.js';
 import { buildResult } from './utils.js';
 
 /**
@@ -13,7 +13,7 @@ import { buildResult } from './utils.js';
  *
  * Signals (each contributes to the score):
  * - Visible text length and word count (low → likely JS-rendered shell)
- * - Text-to-markup ratio (high JS, no text → SPA)
+ * - Text-to-markup ratio against structural markup (high JS, no text → SPA)
  * - Presence of semantic landmarks (`<main>`, `<article>`, `<header>`, `<footer>`, `<nav>`)
  * - Single, meaningful `<h1>`
  * - `<noscript>` fallback for JS-only frameworks
@@ -49,9 +49,14 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
 
   const visibleText = extractVisibleText(html);
   const wordCount = visibleText ? visibleText.split(/\s+/).filter(Boolean).length : 0;
-  const ratio = html.length > 0 ? visibleText.length / html.length : 0;
+  const textOk = visibleText.length >= MIN_TEXT_LENGTH && wordCount >= MIN_WORD_COUNT;
 
-  if (visibleText.length >= MIN_TEXT_LENGTH && wordCount >= MIN_WORD_COUNT) {
+  // Against the markup that could have carried text — script and style
+  // bodies, svg interiors and the head excluded (see structuralMarkupLength).
+  const markup = structuralMarkupLength(html);
+  const ratio = markup > 0 ? visibleText.length / markup : 0;
+
+  if (textOk) {
     findings.push({
       status: 'pass',
       message: `Server-rendered content detected (${wordCount} words, ${visibleText.length} chars of visible text)`,
@@ -78,13 +83,26 @@ export default async function check(ctx: CheckContext): Promise<CheckResult> {
   if (ratio >= MIN_TEXT_TO_HTML_RATIO) {
     findings.push({
       status: 'pass',
-      message: `Text-to-markup ratio is healthy (${(ratio * 100).toFixed(1)}%)`,
+      message: `Text-to-markup ratio is healthy (${(ratio * 100).toFixed(1)}% of structural markup)`,
+    });
+  } else if (textOk) {
+    // The ratio exists as a shell symptom, and the text thresholds just
+    // proved this page is not a shell: the words are demonstrably there.
+    // What a low ratio still says is that the structure around them is
+    // expensive for an agent consuming raw HTML — worth saying, not
+    // worth charging for twice.
+    findings.push({
+      status: 'warn',
+      message: `Markup-heavy page (text is ${(ratio * 100).toFixed(1)}% of structural markup)`,
+      detail: `Recommended minimum: ${(MIN_TEXT_TO_HTML_RATIO * 100).toFixed(0)}%. The content thresholds are met, so this does not move the score.`,
+      hint: 'The visible text clears the content thresholds, so agents can read this page. Trimming wrapper markup would still make it cheaper to consume.',
+      learnMoreUrl: guideUrl(meta.id, 'low-ratio'),
     });
   } else {
     findings.push({
       status: 'warn',
       message: `Low text-to-markup ratio (${(ratio * 100).toFixed(1)}%)`,
-      detail: `Recommended minimum: ${(MIN_TEXT_TO_HTML_RATIO * 100).toFixed(0)}%`,
+      detail: `Recommended minimum: ${(MIN_TEXT_TO_HTML_RATIO * 100).toFixed(0)}% of structural markup (script/style bodies and svg interiors excluded)`,
       hint: 'A very low text-to-markup ratio is a typical SPA-shell symptom. Inline more content directly into the HTML response.',
       learnMoreUrl: guideUrl(meta.id, 'low-ratio'),
     });

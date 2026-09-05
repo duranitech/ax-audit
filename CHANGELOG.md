@@ -2,6 +2,16 @@
 
 All notable changes to ax-audit are documented here.
 
+## [4.2.0] - 2026-09-04
+
+**Three checks stop grading the wrong thing.** Every change can raise scores; none can lower one, so baselines written by 4.1 gain no false regressions.
+
+### Changed
+
+- **`html-rendering` measures the text-to-markup ratio against structural markup.** Script and style bodies, svg interiors, comments and the `<head>` no longer count in the denominator: a framework's hydration payload and a logo's path data are not markup an agent reads for content. Measured raw, vercel.com, stripe.com and nextjs.org all sat under the 5% threshold while serving hundreds of words of visible text — the old ratio graded framework choice, not agent experience. And when the content thresholds are met, a still-low ratio reports as a warn that moves nothing: the ratio exists as a SPA-shell symptom, and text above threshold disproves the shell. A page that misses the content thresholds keeps the −10.
+- **`auth-discovery` honours an API's own statement that it is public.** An OpenAPI description that declares no security scheme — or pins it down with root-level `security: []` — is the machine-readable claim that every operation is anonymous, and a security requirement cannot legally reference an undeclared scheme, so the absence of schemes is decisive. Such a description no longer counts as a surface needing OAuth discovery; a site whose only surface is a credential-free API reports **n/a** instead of 0. The check's own hint already conceded "if everything is public, this is nothing to fix" while charging the full weight for it. An MCP server card has no field for that claim, so the remote endpoint is asked directly: a server requiring OAuth answers an unauthenticated request with 401 — the very challenge the RFC 9728 chain begins from — and a card whose remotes never answer 401, or that names no remotes at all (a locally-run server has no HTTP resource to protect), no longer counts as a surface either. API catalogs and commerce profiles still do: neither carries a machine-readable "no credentials" claim, and there is nothing to probe.
+- **`structured-data` follows `@id` references before reading authorship.** `author: {"@id": "...#organization"}` pointing at a node in the same `@graph` is the canonical JSON-LD idiom — it is what Yoast emits for millions of WordPress sites — and the provenance reader treated it as an empty object and reported "No author declared in structured data". Pure references (an object whose only key is `@id`) now resolve against the graph before names are read.
+
 ## [4.1.0] - 2026-09-04
 
 **The reference tables are importable.** A consumer could always run an audit and never describe one: `CHECK_WEIGHTS`, `CHECK_CATEGORIES` and the crawler lists sat behind an `exports` map that admits only the entry point, so anything printing what a check is worth, grouping results by area, or naming the crawlers worth naming kept a hand-copied table and a test to catch the day it went stale. That is a duplication this package caused.

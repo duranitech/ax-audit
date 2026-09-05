@@ -75,14 +75,15 @@ Findings are tiered by what a client does with a page, because that determines t
 
 ### `html-rendering` — 9%
 
-Whether the static HTML contains content — most AI crawlers do not execute JavaScript. Thresholds: 500 chars / 80 words of visible text, 5% text-to-markup ratio.
+Whether the static HTML contains content — most AI crawlers do not execute JavaScript. Thresholds: 500 chars / 80 words of visible text, 5% text-to-markup ratio. The ratio is measured against structural markup: script and style bodies, svg interiors, comments and the `<head>` are excluded from the denominator, because a hydration payload and a logo's path data are not markup an agent reads for content. Measured raw, vercel.com, stripe.com and nextjs.org all sat under 5% while serving hundreds of words — that graded framework choice, not agent experience.
 
 | Condition | Points |
 | --- | --- |
 | No HTML body returned | **hard fail → 0** |
 | Zero visible text in static HTML | −50 |
 | Sparse content (< 500 chars or < 80 words) | −25 |
-| Text-to-markup ratio < 5% | −10 |
+| Text-to-markup ratio < 5% of structural markup, content thresholds also missed | −10 |
+| Ratio < 5% but content thresholds met | warn only, 0 — the ratio exists as a shell symptom, and the text disproves the shell |
 | Empty SPA mount point (`#root`, `#__next`, `#__nuxt`, `#app`, `#svelte`, `#gatsby`) | −20 |
 | 0 semantic landmarks (`<main>`, `<article>`, `<header>`, `<footer>`, `<nav>`) | −15 |
 | 1–2 semantic landmarks | −10 |
@@ -519,7 +520,7 @@ The OpenAI and Stripe Agentic Commerce Protocol defines no manifest, and AP2 adv
 
 ### `auth-discovery` — can an agent get credentials?
 
-Conditional: **n/a** unless the site exposes an API description, API catalog, MCP server card or commerce profile. Follows the RFC 9728 chain from `WWW-Authenticate` or `/.well-known/oauth-protected-resource` to the authorization server's RFC 8414 or OpenID metadata.
+Conditional: **n/a** unless the site exposes an API description, API catalog, MCP server card or commerce profile. A surface gets to answer for itself where its format allows it. An OpenAPI description that declares no security scheme (or pins it down with root-level `security: []`) is the machine-readable statement that every operation is anonymous, so it does not count. An MCP server card has no such field, so the remote endpoint is asked directly: a server requiring OAuth answers an unauthenticated request with 401 — the very challenge the chain begins from — and a card whose remotes never answer 401 (or that names no remotes at all) does not count either. Demanding OAuth metadata from either would penalize the honest answer. Follows the RFC 9728 chain from `WWW-Authenticate` or `/.well-known/oauth-protected-resource` to the authorization server's RFC 8414 or OpenID metadata.
 
 | Condition | Points |
 | --- | --- |

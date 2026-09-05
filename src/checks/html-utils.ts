@@ -116,3 +116,31 @@ export function countExecutableScripts(html: string): number {
   }
   return count;
 }
+
+/**
+ * How much of the document is markup that could have carried visible text.
+ *
+ * The denominator for the text-to-markup ratio. Three element classes are
+ * emptied rather than counted, because their contents are not markup an
+ * agent parses for content: script bodies are code or serialized data (a
+ * framework's hydration payload alone can be ten times the page), style
+ * bodies are presentation, and svg interiors are drawing instructions —
+ * the inline twin of image bytes, which nobody would count against an
+ * `<img>`. Comments likewise. The head is metadata by definition — much
+ * of it demanded by other checks in this engine — so the measurement
+ * starts at `<body>` when one exists.
+ *
+ * Measured against the raw document instead, vercel.com, stripe.com and
+ * nextjs.org all sat under the 5% threshold while serving hundreds of
+ * words of visible text: the raw ratio graded framework choice, not
+ * agent experience.
+ */
+export function structuralMarkupLength(html: string): number {
+  const stripped = html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '<script></script>')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '<style></style>')
+    .replace(/<svg\b[\s\S]*?<\/svg>/gi, '<svg></svg>')
+    .replace(/<!--[\s\S]*?-->/g, '');
+  const body = stripped.match(/<body[\s\S]*<\/body>/i);
+  return (body ? body[0] : stripped).length;
+}

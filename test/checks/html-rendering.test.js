@@ -120,6 +120,51 @@ describe('html-rendering', () => {
     assert.ok(result.findings.some((f) => f.message.includes('<noscript>')));
   });
 
+
+  it('should not count a hydration payload against the text-to-markup ratio', async () => {
+    // A framework page: solid text, plus an inline data payload fifty
+    // times its size. Measured against the raw document this page sat
+    // near 1% and took the ratio penalty for its framework, not its
+    // content.
+    const payload = `<script>self.__DATA__=${'"x"'.repeat(2000)}</script>`;
+    const ctx = mockContext({}, { html: richHtml(payload) });
+    const result = await check(ctx);
+    const finding = result.findings.find((f) => f.message.includes('ratio is healthy'));
+    assert.ok(finding, 'the ratio is measured against structural markup');
+  });
+
+  it('should not count svg drawing data against the text-to-markup ratio', async () => {
+    const paths = Array.from({ length: 40 }, () => `<path d="${'M0 0L1 1 '.repeat(200)}"/>`).join('');
+    const ctx = mockContext({}, { html: richHtml(`<svg viewBox="0 0 24 24">${paths}</svg>`) });
+    const result = await check(ctx);
+    assert.ok(result.findings.some((f) => f.message.includes('ratio is healthy')));
+  });
+
+  it('should note a markup-heavy page without charging it when the text is there', async () => {
+    // Enough words to prove the page is no shell, wrapped in far more
+    // structural markup than 5% allows. The warn survives; the -10 does
+    // not: the ratio exists as a shell symptom and the shell is disproven.
+    const text = FILLER.repeat(20);
+    const wrappers = Array.from({ length: 900 }, (_, i) => `<div class="w-full max-w-screen-xl item-${i}"></div>`).join('');
+    const html = `<!doctype html><html><body><header>x</header><nav>x</nav><main><h1>Title</h1><p>${text}</p>${wrappers}</main><footer>x</footer></body></html>`;
+    const ctx = mockContext({}, { html });
+    const result = await check(ctx);
+    const finding = result.findings.find((f) => f.message.includes('Markup-heavy page'));
+    assert.ok(finding, 'the low ratio is still reported');
+    assert.equal(finding.status, 'warn');
+    assert.equal(result.score, 100, 'and costs nothing when the content thresholds are met');
+  });
+
+  it('should still charge a low ratio when the text is sparse too', async () => {
+    const wrappers = Array.from({ length: 200 }, () => '<div class="row"><div class="cell"></div></div>').join('');
+    const html = `<!doctype html><html><body><header>x</header><nav>x</nav><main><h1>Hi</h1><p>Tiny words here</p>${wrappers}</main><footer>x</footer></body></html>`;
+    const ctx = mockContext({}, { html });
+    const result = await check(ctx);
+    const finding = result.findings.find((f) => f.message.includes('Low text-to-markup ratio'));
+    assert.ok(finding, 'sparse text keeps the ratio penalty');
+    assert.ok(result.score <= 65, `sparse (-25) and ratio (-10) both apply, got ${result.score}`);
+  });
+
   it('should not penalize JSON-LD scripts as executable JS', async () => {
     const text = FILLER.repeat(40);
     const ldScripts = Array.from({ length: 20 }, () => `<script type="application/ld+json">{"@context":"https://schema.org"}</script>`).join('');

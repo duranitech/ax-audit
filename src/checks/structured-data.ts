@@ -173,9 +173,33 @@ function reportProvenance(parsed: Record<string, unknown>[], findings: Finding[]
   let publisher = false;
   let organizationDetail = false;
 
+  // Index every node that carries an @id, so a reference-shaped property
+  // reads as the node it points at. `author: {"@id": "...#organization"}`
+  // is the canonical @graph idiom — it is what Yoast emits for millions
+  // of sites — and treating it as an empty object told every one of them
+  // they had no author.
+  const byId = new Map<string, Record<string, unknown>>();
   for (const root of parsed) {
     for (const node of nodes(root)) {
-      for (const name of readNames(node.author)) authors.add(name);
+      const id = node['@id'];
+      if (typeof id === 'string' && !byId.has(id)) byId.set(id, node);
+    }
+  }
+  const deref = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(deref);
+    if (value !== null && typeof value === 'object') {
+      const obj = value as Record<string, unknown>;
+      const id = obj['@id'];
+      // Only a pure reference is followed; an inline node with its own
+      // fields already says what it has to say.
+      if (typeof id === 'string' && Object.keys(obj).length === 1) return byId.get(id) ?? value;
+    }
+    return value;
+  };
+
+  for (const root of parsed) {
+    for (const node of nodes(root)) {
+      for (const name of readNames(deref(node.author))) authors.add(name);
       if (node.publisher !== undefined) publisher = true;
       for (const url of readNames(node.sameAs)) sameAs.add(url);
       if (Array.isArray(node.sameAs)) {

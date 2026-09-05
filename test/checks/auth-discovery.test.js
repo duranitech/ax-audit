@@ -13,7 +13,21 @@ const SERVER_META = {
   registration_endpoint: `${ISSUER}/register`,
 };
 
-const OPENAPI = mockResponse({ body: '{"openapi":"3.1.0","info":{"title":"API"}}' });
+// Declares a security scheme, so the API states that credentials exist
+// somewhere — the case where OAuth discovery genuinely applies.
+const OPENAPI = mockResponse({
+  body: JSON.stringify({
+    openapi: '3.1.0',
+    info: { title: 'API' },
+    components: { securitySchemes: { oauth: { type: 'oauth2', flows: {} } } },
+  }),
+});
+
+// Declares no scheme at all and pins it down with `security: []`: the
+// machine-readable statement that every operation is anonymous.
+const PUBLIC_OPENAPI = mockResponse({
+  body: JSON.stringify({ openapi: '3.1.0', info: { title: 'API' }, security: [], paths: {} }),
+});
 
 function ctx({ resource = RESOURCE_META, server = SERVER_META, routes = {}, headers = {}, surface = true } = {}) {
   return mockContext(
@@ -58,11 +72,83 @@ describe('auth-discovery: applicability', () => {
     assert.ok(finding.hint.includes('cannot read your documentation'));
   });
 
-  it('should apply when the site exposes an MCP server card', async () => {
-    const c = mockContext({ '/mcp/server-card': mockResponse({ body: '{"name":"com.example/x"}' }) });
+  it('should apply when an MCP server card names a remote that answers 401', async () => {
+    const card = JSON.stringify({ name: 'com.example/x', remotes: [{ type: 'streamable-http', url: 'https://example.com/mcp-remote' }] });
+    const c = mockContext({
+      '/mcp/server-card': mockResponse({ body: card }),
+      '/mcp-remote': mockResponse({ status: 401, ok: false, body: 'Unauthorized' }),
+    });
     const result = await check(c);
     assert.notEqual(result.applicable, false);
     assert.ok(result.findings.some((f) => f.message.includes('an MCP server card')));
+  });
+
+  it('should report N/A when the MCP remote serves anonymous callers', async () => {
+    const card = JSON.stringify({ name: 'com.example/x', remotes: [{ type: 'streamable-http', url: 'https://example.com/mcp-remote' }] });
+    const c = mockContext({
+      '/mcp/server-card': mockResponse({ body: card }),
+      // 405 is what a streamable-http endpoint says to a bare GET when it
+      // is not gating on credentials; the point is that it is not a 401.
+      '/mcp-remote': mockResponse({ status: 405, ok: false, body: 'Method Not Allowed' }),
+    });
+    const result = await check(c);
+    assert.equal(result.applicable, false);
+    const finding = result.findings.find((f) => f.message.includes('serves anonymous callers'));
+    assert.ok(finding, 'the N/A names the anonymous remote as the reason');
+  });
+
+  it('should report N/A for an MCP card with no remotes', async () => {
+    const c = mockContext({ '/mcp/server-card': mockResponse({ body: '{"name":"com.example/x"}' }) });
+    const result = await check(c);
+    assert.equal(result.applicable, false);
+  });
+
+  it('should treat an unreadable MCP card as a surface', async () => {
+    const c = mockContext({ '/mcp/server-card': mockResponse({ body: 'name: com.example/x' }) });
+    const result = await check(c);
+    assert.notEqual(result.applicable, false);
+  });
+
+  it('should report N/A when the only API description declares no authentication', async () => {
+    const c = mockContext({ '/openapi.json': PUBLIC_OPENAPI });
+    const result = await check(c);
+    assert.equal(result.applicable, false);
+    const finding = result.findings.find((f) => f.message.includes('declares no authentication'));
+    assert.ok(finding, 'the N/A names the API as the reason');
+    assert.ok(finding.detail.includes('/openapi.json'));
+  });
+
+  it('should report N/A for an OpenAPI with no security schemes even without security: []', async () => {
+    const body = JSON.stringify({ openapi: '3.0.0', info: { title: 'API' }, paths: {} });
+    const c = mockContext({ '/openapi.json': mockResponse({ body }) });
+    const result = await check(c);
+    assert.equal(result.applicable, false);
+  });
+
+  it('should apply when swagger 2 securityDefinitions declare a scheme', async () => {
+    const body = JSON.stringify({ swagger: '2.0', securityDefinitions: { key: { type: 'apiKey' } } });
+    const c = mockContext({ '/openapi.json': mockResponse({ body }) });
+    const result = await check(c);
+    assert.notEqual(result.applicable, false);
+    assert.equal(result.score, 0);
+  });
+
+  it('should still apply when a public API sits beside an authenticated MCP server', async () => {
+    const card = JSON.stringify({ name: 'com.example/x', remotes: [{ url: 'https://example.com/mcp-remote' }] });
+    const c = mockContext({
+      '/openapi.json': PUBLIC_OPENAPI,
+      '/mcp/server-card': mockResponse({ body: card }),
+      '/mcp-remote': mockResponse({ status: 401, ok: false, body: '' }),
+    });
+    const result = await check(c);
+    assert.notEqual(result.applicable, false);
+    assert.ok(result.findings.some((f) => f.message.includes('an MCP server card')));
+  });
+
+  it('should treat an unreadable API description as a surface', async () => {
+    const c = mockContext({ '/openapi.json': mockResponse({ body: 'openapi: 3.1.0' }) });
+    const result = await check(c);
+    assert.notEqual(result.applicable, false);
   });
 });
 
