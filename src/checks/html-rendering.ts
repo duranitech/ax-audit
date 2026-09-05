@@ -1,6 +1,12 @@
 import { guideUrl } from '../guide-urls.js';
 import type { CheckContext, CheckResult, CheckMeta, Finding } from '../types.js';
-import { countExecutableScripts, extractVisibleText, findOpeningTag, getMetaContent, structuralMarkupLength } from './html-utils.js';
+import {
+  countExecutableScripts,
+  extractVisibleText,
+  findOpeningTag,
+  getMetaContent,
+  structuralMarkupLength,
+} from './html-utils.js';
 import { buildResult } from './utils.js';
 
 /**
